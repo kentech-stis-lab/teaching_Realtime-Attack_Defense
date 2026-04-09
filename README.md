@@ -6,18 +6,20 @@ OWASP Juice Shop + Docker Compose + Suricata + Web Dashboard
 
 > **Windows 사용자**: `start.bat` 대신 **WSL2 Ubuntu** 또는 **Git Bash** 에서 `bash start.sh`를 실행하세요. `.sh` 스크립트가 Docker 자동 설치, 패킷 캡처 도구 설치 등을 모두 처리합니다. `.bat` 파일은 이러한 자동화가 포함되어 있지 않습니다.
 
-## 빠른 시작
+## 사용법
+
+### 1. 환경 시작
 
 ```bash
 git clone https://github.com/kentech-stis-lab/teaching_Realtime-Attack_Defense.git
 cd teaching_Realtime-Attack_Defense
 
 # Linux / Mac / Windows(WSL2, Git Bash) — 권장
-bash start.sh    # Docker 미설치 시 자동 설치, sudo 비밀번호 입력
-
-# 종료
-bash stop.sh
+bash start.sh
+# → sudo 비밀번호 입력 → Docker 자동 설치 → 빌드 → 8개 컨테이너 기동
 ```
+
+`start.sh`와 `capture-wireshark.sh`는 내부적으로 `install-deps.sh`를 호출하여 모든 의존성을 자동으로 해결합니다 (Docker Engine, Docker 데몬, tcpdump, tshark, docker 그룹 등). 의존성만 별도로 설치하려면 `bash install-deps.sh`.
 
 | 서비스 | URL | 용도 |
 |--------|-----|------|
@@ -26,6 +28,216 @@ bash stop.sh
 | API Docs | http://localhost:8000/docs | FastAPI Swagger |
 | SSH | `ssh admin@localhost -p 2222` | Brute Force 대상 (pw: admin123) |
 | FTP | `ftp localhost 2121` | Brute Force 대상 (pw: admin123) |
+
+### 2. 대시보드에서 공격 실행
+
+브라우저에서 **http://localhost:8080** 접속 → Attack Panel에서 공격 선택 → **[Run]** 클릭
+
+12종의 PoC 공격을 웹 UI에서 바로 실행하고, 실시간으로 Suricata IDS 탐지 결과를 확인할 수 있습니다.
+
+공격을 실행하면 **터미널 위에 패킷 필터 바**가 자동으로 표시됩니다. 해당 공격의 Wireshark/tshark 필터 검색식이 나타나므로, 별도 터미널에서 `capture-wireshark.sh`를 실행한 후 이 필터를 적용하면 해당 공격 패킷만 골라볼 수 있습니다.
+
+### 3. 패킷 캡처 (공격 payload 분석)
+
+> **중요**: 공격 payload (예: `' OR 1=1--`, `<script>alert()</script>`)는 Docker 내부 **backend-net** (172.20.1.0/24)에서 발생합니다. Windows Wireshark의 loopback 캡처로는 이 트래픽을 볼 수 없으며, **WSL2에서 `capture-wireshark.sh`를 실행**해야 합니다.
+
+```bash
+bash capture-wireshark.sh
+# → sudo 비밀번호 입력 → 캡처 모드 선택 → Docker 내부 공격 패킷 캡처
+```
+
+캡처 모드:
+| 모드 | 설명 | 용도 |
+|------|------|------|
+| 1) tshark -V (기본) | 터미널에 패킷 + payload 상세 출력 | 실시간 확인 |
+| 2) pcap 파일 저장 | `.pcap` 파일로 저장, Wireshark에서 열기 | Windows Wireshark 사용 시 |
+| 3) tcpdump | 경량 터미널 + hex dump | 상세 분석 |
+| 4) wireshark GUI | Wireshark GUI 창 | Linux GUI 환경 |
+
+**pcap 파일 모드** (모드 2)가 가장 권장됩니다:
+1. `capture-wireshark.sh` 실행 → 모드 2 선택
+2. 대시보드에서 공격 실행
+3. Ctrl+C로 캡처 종료 → `.pcap` 파일 생성
+4. Windows Wireshark에서 `.pcap` 파일 열기
+5. **Analyze → Decode As → TCP port 3000 = HTTP** (필수)
+6. Display filter 적용: `ip.dst == 172.20.1.10 && http`
+7. 패킷 우클릭 → **Follow → HTTP Stream** → payload 확인
+
+공격별 payload 예시:
+| 공격 | 대상 | payload 위치 |
+|------|------|-------------|
+| **SQLi** | 172.20.1.10 (Juice Shop) | POST body: `{"email":"' OR 1=1--"}` |
+| **XSS** | 172.20.1.10 (Juice Shop) | URI/body: `<iframe>`, `<script>` |
+| **Brute Force (Web)** | 172.20.1.10 (Juice Shop) | POST body: 반복 login |
+| **Brute Force (SSH)** | 172.20.0.11:2222 | SSH auth attempts |
+| **Brute Force (FTP)** | 172.20.0.12:21 | FTP USER/PASS commands |
+| **Bot** | 172.20.1.10 (Juice Shop) | rapid GET /api/Products |
+| **DoS** | 172.20.1.10:3000 | partial HTTP headers (Slowloris) |
+| **Port Scan** | 172.20.0.0/24 | SYN to many hosts/ports |
+| **Infiltration** | 172.20.1.30/172.20.1.20 | internal API/DB access |
+
+> **HTTP Decode 자동 적용**: `capture-wireshark.sh`는 `-d tcp.port==3000,http` 플래그를 자동으로 적용합니다. pcap 파일을 Wireshark GUI에서 열 때는 수동으로 **Analyze → Decode As → TCP port 3000 = HTTP** 설정이 필요합니다.
+
+### 4. 환경 종료
+
+```bash
+bash stop.sh       # Linux/WSL2
+stop.bat           # Windows
+```
+
+---
+
+## 트러블슈팅
+
+| 증상 | 원인 | 해결 |
+|------|------|------|
+| `docker: command not found` | Docker 미설치 | `start.sh`가 자동 설치. 수동: 아래 가이드 참고 |
+| `Cannot connect to the Docker daemon` | Docker 데몬 미실행 | `start.sh`가 자동 시작. 수동: `sudo service docker start` |
+| `apt-get` 실행 시 lock 에러 | 자동 업데이트(unattended-upgr) 점유 | 잠시 기다린 후 재시도, 또는 `sudo kill <PID>` |
+| `port is already allocated` | 다른 프로세스가 해당 포트 사용 중 | `bash stop.sh` 후 재시작, 또는 충돌 프로세스 종료 |
+| 패킷 캡처 권한 에러 | root 권한 필요 | `capture-wireshark.sh`가 sudo로 실행. 비밀번호 입력 필요 |
+| 캡처에 공격 패킷 안 보임 | 잘못된 인터페이스 | `capture-wireshark.sh`가 Docker bridge를 자동 탐지 |
+| `http` 필터에 패킷 안 잡힘 | 비표준 포트(3000/5000/8000) | `capture-wireshark.sh`가 `-d` 플래그로 자동 적용. Wireshark GUI: Analyze → Decode As → TCP port 3000 = HTTP |
+| Wireshark에서 캡처 안 됨 (Windows) | Npcap 미설치 | `capture-wireshark.bat`가 자동 설치. 수동: [npcap.com](https://npcap.com) |
+| Dashboard 접속 안 됨 (`localhost:8080`) | backend 미기동 | `docker logs backend`로 확인 후 `bash start.sh` 재실행 |
+
+> **WSL2 참고**: WSL2를 재시작할 때마다 `sudo service docker start`를 실행해야 합니다. `start.sh`가 자동으로 처리합니다.
+
+---
+
+## 아키텍처
+
+```
+            ┌────────────── frontend-net (172.20.0.0/24) ──────────────┐
+            │                                                           │
+Student ──→ [Dashboard .2]──→ [Backend .100:8000]──→ [Juice Shop .10:3000]
+Browser     [:8080]                  │                [SSH .11:2222]
+            │                        │                [FTP .12:21]
+            │                        │                [Suricata .13]
+            │                        │
+            │     ┌─── backend-net (172.20.1.0/24) ──────────┐
+            │     │                                           │
+            │     │  Backend .100 ──→ Juice Shop .10:3000     │
+            │     │                ──→ internal-api .30:5000   │
+            │     │                ──→ MySQL .20:3306          │
+            │     └───────────────────────────────────────────┘
+            │
+            └── alert ← eve.json ← 공격 실행 시 자동 기록
+```
+
+> 모든 컨테이너 IP는 `docker-compose.yml`에서 고정 할당됩니다 (DHCP 아님).
+
+**8개 Docker 서비스**: Juice Shop, SSH, FTP, Suricata, MySQL, Flask API, FastAPI Backend, React Dashboard
+
+## 사전 준비된 공격 PoC (12종)
+
+| ID | 유형 | 대상 | 언어 | CIC-IDS Label |
+|----|------|------|------|---------------|
+| sqli_login_bypass | SQLi | Juice Shop | Python | Web Attack - Sql Injection |
+| sqli_union_select | SQLi | Juice Shop | Python | Web Attack - Sql Injection |
+| xss_dom | XSS | Juice Shop | Python | Web Attack - XSS |
+| xss_reflected | XSS | Juice Shop | Python | Web Attack - XSS |
+| xss_stored | XSS | Juice Shop | Python | Web Attack - XSS |
+| brute_web | BruteForce | Juice Shop | Python | Web Attack - Brute Force |
+| brute_ssh | BruteForce | SSH 서버 | Bash | SSH-Patator |
+| brute_ftp | BruteForce | FTP 서버 | Bash | FTP-Patator |
+| bot_scraper | Bot | Juice Shop | Python | Bot |
+| dos_slowloris | DoS | Juice Shop | Python | DoS slowloris |
+| portscan | PortScan | Docker net | Bash | PortScan |
+| infiltration | Infiltration | Internal | Python | Infiltration |
+
+## Suricata IDS 규칙 (11종)
+
+| SID | 탐지 대상 | 시그니처 핵심 |
+|-----|----------|-------------|
+| 100001 | SQLi Attempt | SELECT + '/--/# in URI |
+| 100002 | SQLi UNION | UNION+SELECT in URI |
+| 100003 | XSS Script Tag | `<script` in HTTP |
+| 100004 | XSS Event Handler | onload/onerror pattern |
+| 100005 | Web Brute Force | POST /rest/user/login x5/30s |
+| 100006 | SSH Brute Force | port 2222 SYN x5/60s |
+| 100007 | FTP Brute Force | port 21 USER x5/60s |
+| 100008 | Bot Scraping | GET /api/Products x30/10s |
+| 100009 | DoS Slowloris | SYN x20/10s to HTTP |
+| 100010 | Port Scan | SYN x20/5s multi-port |
+| 100011 | Infiltration | frontend -> MySQL (3306) |
+
+## 웹 대시보드
+
+3-Panel 레이아웃:
+
+- **Attack Panel** (Red): PoC 12종 목록, [Run] 버튼으로 실행, [View Code]로 소스 확인, 학생이 새 PoC 추가 가능
+- **Defense Panel** (Blue): Suricata 규칙 11종, ON/OFF 토글, 학생이 새 규칙 추가 가능
+- **Live Monitor**: 실시간 alert 피드 (3초 폴링), 공격 유형별 통계 차트, 컨테이너 상태
+- **Terminal**: 공격 실행 결과 stdout/stderr, 드래그로 상하 크기 조절
+
+## 프로젝트 구조
+
+```
+teaching/
+├── docker-compose.yml              # Docker 8개 서비스 구성
+├── install-deps.sh                 # 의존성 자동 설치 (Docker, tcpdump, tshark 등)
+├── start.sh / stop.sh              # Linux/Mac 실행/종료 (install-deps.sh 자동 호출)
+├── capture-wireshark.sh            # 패킷 캡처 (install-deps.sh 자동 호출)
+├── start.bat / stop.bat            # Windows 실행/종료
+├── capture-wireshark.bat           # Windows 패킷 캡처 (Wireshark 자동 설치)
+├── setup-windows.md                # Windows 설치 가이드
+│
+├── backend/                        # FastAPI 서버
+│   ├── main.py                     # 앱 진입점
+│   ├── routers/
+│   │   ├── attacks.py              # PoC CRUD + 실행 API
+│   │   ├── rules.py                # Suricata 규칙 CRUD + 토글
+│   │   └── monitor.py              # Alert 폴링 + 상태
+│   ├── pocs/
+│   │   ├── preset/                 # 사전 준비 PoC 12종 (.py/.sh + .json)
+│   │   └── custom/                 # 학생 추가 PoC
+│   └── rules/
+│       ├── preset/local.rules      # Suricata 규칙 11종
+│       └── custom/                 # 학생 추가 규칙
+│
+├── dashboard/                      # React 웹 대시보드
+│   ├── src/
+│   │   ├── App.jsx                 # 3-panel + terminal 레이아웃
+│   │   ├── components/
+│   │   │   ├── AttackPanel/        # 공격 목록/실행/에디터
+│   │   │   ├── DefensePanel/       # 규칙 목록/토글/에디터
+│   │   │   ├── MonitorPanel/       # Alert 피드/통계/시스템 상태
+│   │   │   └── common/             # Terminal, CodeModal, PacketFilter
+│   │   └── hooks/useWebSocket.js   # 실시간 연결
+│   ├── nginx.conf                  # API/WS 프록시
+│   └── Dockerfile                  # multi-stage build (node + nginx)
+│
+├── suricata/                       # IDS 설정
+│   ├── suricata.yaml               # 경량 설정 (eth0, 메모리 제한)
+│   └── rules/local.rules           # 탐지 규칙 11종
+│
+├── services/                       # 추가 서비스
+│   ├── internal-api/               # Flask (Infiltration 대상)
+│   └── internal-db/init.sql        # MySQL 초기화 (FLAG 테이블)
+│
+├── wordlists/common.txt            # Brute Force용 50개 (admin123 포함)
+│
+├── slides/                         # 강의 슬라이드
+│   ├── main.tex / main.pdf         # 내부 공유용 (아키텍처, 설계)
+│   └── main1.tex / main1.pdf       # Day 1 학생 강의용
+│
+└── docs/                           # 설계 문서
+    ├── 3day-curriculum.md           # 3일 과정 상세 커리큘럼
+    ├── 3day-curriculum-summary.md   # 3일 과정 요약
+    ├── workshop-design.md           # 수업 설계
+    ├── implementation-design.md     # 구현 설계서
+    └── cicids/                      # CIC-IDS 2017 데이터 분석
+        ├── scripts/
+        └── results/
+```
+
+## 요구사항
+
+- Docker + Docker Compose (또는 Docker Desktop)
+- 인터넷 불필요 (오프라인 가능, 이미지만 사전 pull)
+- 최소 RAM 4GB 권장
+- Windows: [setup-windows.md](setup-windows.md) 참고
 
 ---
 
@@ -188,241 +400,3 @@ bash stop.sh
   - 성능 평가: 데이터 불균형이 주, 평가지표가 서브
   - 실습 시간을 오전/오후 중 한쪽으로 몰아넣기 가능
   - 경량 데이터셋 구성 필요 (CIC-IDS 전체는 Colab에 무거움)
-
----
-
----
-
-## 아키텍처
-
-```
-            ┌────────────── frontend-net (172.20.0.0/24) ──────────────┐
-            │                                                           │
-Student ──→ [Dashboard .2]──→ [Backend .100:8000]──→ [Juice Shop .10:3000]
-Browser     [:8080]                  │                [SSH .11:2222]
-            │                        │                [FTP .12:21]
-            │                        │                [Suricata .13]
-            │                        │
-            │     ┌─── backend-net (172.20.1.0/24) ──────────┐
-            │     │                                           │
-            │     │  Backend .100 ──→ Juice Shop .10:3000     │
-            │     │                ──→ internal-api .30:5000   │
-            │     │                ──→ MySQL .20:3306          │
-            │     └───────────────────────────────────────────┘
-            │
-            └── alert ← eve.json ← 공격 실행 시 자동 기록
-```
-
-> 모든 컨테이너 IP는 `docker-compose.yml`에서 고정 할당됩니다 (DHCP 아님).
-
-**8개 Docker 서비스**: Juice Shop, SSH, FTP, Suricata, MySQL, Flask API, FastAPI Backend, React Dashboard
-
-## 사전 준비된 공격 PoC (12종)
-
-| ID | 유형 | 대상 | 언어 | CIC-IDS Label |
-|----|------|------|------|---------------|
-| sqli_login_bypass | SQLi | Juice Shop | Python | Web Attack - Sql Injection |
-| sqli_union_select | SQLi | Juice Shop | Python | Web Attack - Sql Injection |
-| xss_dom | XSS | Juice Shop | Python | Web Attack - XSS |
-| xss_reflected | XSS | Juice Shop | Python | Web Attack - XSS |
-| xss_stored | XSS | Juice Shop | Python | Web Attack - XSS |
-| brute_web | BruteForce | Juice Shop | Python | Web Attack - Brute Force |
-| brute_ssh | BruteForce | SSH 서버 | Bash | SSH-Patator |
-| brute_ftp | BruteForce | FTP 서버 | Bash | FTP-Patator |
-| bot_scraper | Bot | Juice Shop | Python | Bot |
-| dos_slowloris | DoS | Juice Shop | Python | DoS slowloris |
-| portscan | PortScan | Docker net | Bash | PortScan |
-| infiltration | Infiltration | Internal | Python | Infiltration |
-
-## Suricata IDS 규칙 (11종)
-
-| SID | 탐지 대상 | 시그니처 핵심 |
-|-----|----------|-------------|
-| 100001 | SQLi Attempt | SELECT + '/--/# in URI |
-| 100002 | SQLi UNION | UNION+SELECT in URI |
-| 100003 | XSS Script Tag | `<script` in HTTP |
-| 100004 | XSS Event Handler | onload/onerror pattern |
-| 100005 | Web Brute Force | POST /rest/user/login x5/30s |
-| 100006 | SSH Brute Force | port 2222 SYN x5/60s |
-| 100007 | FTP Brute Force | port 21 USER x5/60s |
-| 100008 | Bot Scraping | GET /api/Products x30/10s |
-| 100009 | DoS Slowloris | SYN x20/10s to HTTP |
-| 100010 | Port Scan | SYN x20/5s multi-port |
-| 100011 | Infiltration | frontend -> MySQL (3306) |
-
-## 웹 대시보드
-
-3-Panel 레이아웃:
-
-- **Attack Panel** (Red): PoC 12종 목록, [Run] 버튼으로 실행, [View Code]로 소스 확인, 학생이 새 PoC 추가 가능
-- **Defense Panel** (Blue): Suricata 규칙 11종, ON/OFF 토글, 학생이 새 규칙 추가 가능
-- **Live Monitor**: 실시간 alert 피드 (3초 폴링), 공격 유형별 통계 차트, 컨테이너 상태
-- **Terminal**: 공격 실행 결과 stdout/stderr, 드래그로 상하 크기 조절
-
-## 프로젝트 구조
-
-```
-teaching/
-├── docker-compose.yml              # Docker 8개 서비스 구성
-├── install-deps.sh                 # 의존성 자동 설치 (Docker, tcpdump, tshark 등)
-├── start.sh / stop.sh              # Linux/Mac 실행/종료 (install-deps.sh 자동 호출)
-├── capture-wireshark.sh            # 패킷 캡처 (install-deps.sh 자동 호출)
-├── start.bat / stop.bat            # Windows 실행/종료
-├── capture-wireshark.bat           # Windows 패킷 캡처 (Wireshark 자동 설치)
-├── setup-windows.md                # Windows 설치 가이드
-│
-├── backend/                        # FastAPI 서버
-│   ├── main.py                     # 앱 진입점
-│   ├── routers/
-│   │   ├── attacks.py              # PoC CRUD + 실행 API
-│   │   ├── rules.py                # Suricata 규칙 CRUD + 토글
-│   │   └── monitor.py              # Alert 폴링 + 상태
-│   ├── pocs/
-│   │   ├── preset/                 # 사전 준비 PoC 12종 (.py/.sh + .json)
-│   │   └── custom/                 # 학생 추가 PoC
-│   └── rules/
-│       ├── preset/local.rules      # Suricata 규칙 11종
-│       └── custom/                 # 학생 추가 규칙
-│
-├── dashboard/                      # React 웹 대시보드
-│   ├── src/
-│   │   ├── App.jsx                 # 3-panel + terminal 레이아웃
-│   │   ├── components/
-│   │   │   ├── AttackPanel/        # 공격 목록/실행/에디터
-│   │   │   ├── DefensePanel/       # 규칙 목록/토글/에디터
-│   │   │   ├── MonitorPanel/       # Alert 피드/통계/시스템 상태
-│   │   │   └── common/             # Terminal, CodeModal
-│   │   └── hooks/useWebSocket.js   # 실시간 연결
-│   ├── nginx.conf                  # API/WS 프록시
-│   └── Dockerfile                  # multi-stage build (node + nginx)
-│
-├── suricata/                       # IDS 설정
-│   ├── suricata.yaml               # 경량 설정 (eth0, 메모리 제한)
-│   └── rules/local.rules           # 탐지 규칙 11종
-│
-├── services/                       # 추가 서비스
-│   ├── internal-api/               # Flask (Infiltration 대상)
-│   └── internal-db/init.sql        # MySQL 초기화 (FLAG 테이블)
-│
-├── wordlists/common.txt            # Brute Force용 50개 (admin123 포함)
-│
-├── slides/                         # 강의 슬라이드
-│   ├── main.tex / main.pdf         # 내부 공유용 (아키텍처, 설계)
-│   └── main1.tex / main1.pdf       # Day 1 학생 강의용
-│
-└── docs/                           # 설계 문서
-    ├── 3day-curriculum.md           # 3일 과정 상세 커리큘럼
-    ├── 3day-curriculum-summary.md   # 3일 과정 요약
-    ├── workshop-design.md           # 수업 설계
-    ├── implementation-design.md     # 구현 설계서
-    └── cicids/                      # CIC-IDS 2017 데이터 분석
-        ├── scripts/
-        └── results/
-```
-
-## 요구사항
-
-- Docker + Docker Compose (또는 Docker Desktop)
-- 인터넷 불필요 (오프라인 가능, 이미지만 사전 pull)
-- 최소 RAM 4GB 권장
-- Windows: [setup-windows.md](setup-windows.md) 참고
-
----
-
-## 사용법
-
-### 1. 환경 시작 (Docker 자동 설치 포함)
-
-```bash
-# Linux / Mac / Windows(WSL2, Git Bash) — 권장
-bash start.sh
-# → sudo 비밀번호 입력 → Docker 자동 설치 → 빌드 → 8개 컨테이너 기동
-```
-
-`start.sh`와 `capture-wireshark.sh`는 내부적으로 `install-deps.sh`를 호출하여 모든 의존성을 자동으로 해결합니다. 의존성만 별도로 설치하려면:
-
-```bash
-bash install-deps.sh
-# → sudo 비밀번호 입력 → 아래 항목 자동 설치
-```
-
-`install-deps.sh`가 자동으로 처리하는 것:
-- Docker Engine 미설치 시 자동 설치 (apt 기반, GPG 키 + 공식 저장소)
-- Docker 데몬 미실행 시 자동 시작 (WSL2 포함, 최대 10초 대기)
-- 패킷 캡처 도구 (tcpdump, tshark) 자동 설치
-- 현재 사용자 docker 그룹 추가
-- Docker Compose 사용 가능 여부 확인
-
-### 2. 대시보드에서 공격 실행
-
-브라우저에서 **http://localhost:8080** 접속 → Attack Panel에서 공격 선택 → **[Run]** 클릭
-
-12종의 PoC 공격을 웹 UI에서 바로 실행하고, 실시간으로 Suricata IDS 탐지 결과를 확인할 수 있습니다.
-
-공격을 실행하면 **터미널 위에 패킷 필터 바**가 자동으로 표시됩니다. 해당 공격의 Wireshark/tshark 필터 검색식이 나타나므로, 별도 터미널에서 `capture-wireshark.sh`를 실행한 후 이 필터를 적용하면 해당 공격 패킷만 골라볼 수 있습니다.
-
-### 3. 패킷 캡처 (공격 payload 분석)
-
-> **중요**: 공격 payload (예: `' OR 1=1--`, `<script>alert()</script>`)는 Docker 내부 **backend-net** (172.20.1.0/24)에서 발생합니다. Windows Wireshark의 loopback 캡처로는 이 트래픽을 볼 수 없으며, **WSL2에서 `capture-wireshark.sh`를 실행**해야 합니다.
-
-```bash
-bash capture-wireshark.sh
-# → sudo 비밀번호 입력 → 캡처 모드 선택 → Docker 내부 공격 패킷 캡처
-```
-
-캡처 모드:
-| 모드 | 설명 | 용도 |
-|------|------|------|
-| 1) tshark -V (기본) | 터미널에 패킷 + payload 상세 출력 | 실시간 확인 |
-| 2) pcap 파일 저장 | `.pcap` 파일로 저장, Wireshark에서 열기 | Windows Wireshark 사용 시 |
-| 3) tcpdump | 경량 터미널 + hex dump | 상세 분석 |
-| 4) wireshark GUI | Wireshark GUI 창 | Linux GUI 환경 |
-
-**pcap 파일 모드** (모드 2)가 가장 권장됩니다:
-1. `capture-wireshark.sh` 실행 → 모드 2 선택
-2. 대시보드에서 공격 실행
-3. Ctrl+C로 캡처 종료 → `.pcap` 파일 생성
-4. Windows Wireshark에서 `.pcap` 파일 열기
-5. **Analyze → Decode As → TCP port 3000 = HTTP** (필수)
-6. Display filter 적용: `ip.dst == 172.20.1.10 && http`
-7. 패킷 우클릭 → **Follow → HTTP Stream** → payload 확인
-
-공격별 payload 예시:
-| 공격 | 대상 | payload 위치 |
-|------|------|-------------|
-| **SQLi** | 172.20.1.10 (Juice Shop) | POST body: `{"email":"' OR 1=1--"}` |
-| **XSS** | 172.20.1.10 (Juice Shop) | URI/body: `<iframe>`, `<script>` |
-| **Brute Force (Web)** | 172.20.1.10 (Juice Shop) | POST body: 반복 login |
-| **Brute Force (SSH)** | 172.20.0.11:2222 | SSH auth attempts |
-| **Brute Force (FTP)** | 172.20.0.12:21 | FTP USER/PASS commands |
-| **Bot** | 172.20.1.10 (Juice Shop) | rapid GET /api/Products |
-| **DoS** | 172.20.1.10:3000 | SYN flood |
-| **Port Scan** | multiple IPs | SYN to many ports |
-| **Infiltration** | 172.20.1.30/172.20.1.20 | internal API/DB access |
-
-> **HTTP Decode 자동 적용**: `capture-wireshark.sh`는 `-d tcp.port==3000,http` 플래그를 자동으로 적용합니다. pcap 파일을 Wireshark GUI에서 열 때는 수동으로 **Analyze → Decode As → TCP port 3000 = HTTP** 설정이 필요합니다.
-
-### 4. 환경 종료
-
-```bash
-bash stop.sh       # Linux/WSL2
-stop.bat           # Windows
-```
-
----
-
-## 트러블슈팅
-
-| 증상 | 원인 | 해결 |
-|------|------|------|
-| `docker: command not found` | Docker 미설치 | `start.sh`가 자동 설치. 수동: 아래 가이드 참고 |
-| `Cannot connect to the Docker daemon` | Docker 데몬 미실행 | `start.sh`가 자동 시작. 수동: `sudo service docker start` |
-| `apt-get` 실행 시 lock 에러 | 자동 업데이트(unattended-upgr) 점유 | 잠시 기다린 후 재시도, 또는 `sudo kill <PID>` |
-| `port is already allocated` | 다른 프로세스가 해당 포트 사용 중 | `bash stop.sh` 후 재시작, 또는 충돌 프로세스 종료 |
-| 패킷 캡처 권한 에러 | root 권한 필요 | `capture-wireshark.sh`가 sudo로 실행. 비밀번호 입력 필요 |
-| 캡처에 공격 패킷 안 보임 | 잘못된 인터페이스 | `capture-wireshark.sh`가 Docker bridge를 자동 탐지 |
-| `http` 필터에 패킷 안 잡힘 | 비표준 포트(3000/5000/8000) | `capture-wireshark.sh`가 `-d` 플래그로 자동 적용. Wireshark GUI: Analyze → Decode As → TCP port 3000 = HTTP |
-| Wireshark에서 캡처 안 됨 (Windows) | Npcap 미설치 | `capture-wireshark.bat`가 자동 설치. 수동: [npcap.com](https://npcap.com) |
-| Dashboard 접속 안 됨 (`localhost:8080`) | backend 미기동 | `docker logs backend`로 확인 후 `bash start.sh` 재실행 |
-
-> **WSL2 참고**: WSL2를 재시작할 때마다 `sudo service docker start`를 실행해야 합니다. `start.sh`가 자동으로 처리합니다.

