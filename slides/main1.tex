@@ -1,0 +1,1709 @@
+% ============================================================
+%  웹 해킹 실습 — Day 1: 공격의 원리 (고등학생 대상)
+%  이선우 (KENTECH STIS Lab)
+% ============================================================
+\documentclass[aspectratio=169,10pt]{beamer}
+\usetheme{metropolis}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamercolor{frametitle}{bg=black!85,fg=white}
+\setbeamercolor{progress bar}{fg=orange!80!black}
+\setbeamerfont{itemize/enumerate body}{size=\footnotesize}
+\setbeamerfont{itemize/enumerate subbody}{size=\scriptsize}
+\setbeamerfont{block body}{size=\footnotesize}
+\setbeamerfont{block title}{size=\small}
+
+\usepackage[hangul]{kotex}
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,arrows.meta,shapes.geometric,backgrounds,fit}
+\usepackage{booktabs,listings,xcolor,adjustbox,colortbl}
+
+\makeatletter
+\@ifundefined{tikzscope@linewidth}{\newdimen\tikzscope@linewidth}{}
+\@ifundefined{pgfscope@linewidth}{\newdimen\pgfscope@linewidth}{}
+\@ifundefined{pgfsys@end@save}{\def\pgfsys@end@save{\pgfsys@endscope}}{}
+\makeatother
+
+\definecolor{coreBlue}{RGB}{50,100,170}
+\definecolor{intGreen}{RGB}{60,140,80}
+\definecolor{opsOrange}{RGB}{200,120,50}
+\definecolor{accent}{RGB}{200,60,60}
+\definecolor{muted}{RGB}{120,120,120}
+\definecolor{codegreen}{RGB}{0,120,0}
+\definecolor{redTeam}{RGB}{190,40,40}
+\definecolor{blueTeam}{RGB}{30,80,170}
+\definecolor{layer1}{RGB}{220,232,245}
+\definecolor{layer2}{RGB}{225,240,225}
+\definecolor{layer3}{RGB}{245,230,220}
+\definecolor{juiceGreen}{RGB}{80,160,50}
+
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{coreBlue}\bfseries,
+  commentstyle=\color{muted},
+  stringstyle=\color{codegreen},
+  showstringspaces=false, breaklines=true,
+  frame=single, rulecolor=\color{muted!40},
+  xleftmargin=4pt, aboveskip=4pt, belowskip=4pt,
+  escapeinside={(*@}{@*)},
+}
+\lstset{style=code}
+\newcommand{\hlt}[1]{\textcolor{accent}{\textbf{#1}}}
+\newcommand{\red}[1]{\textcolor{redTeam}{\textbf{#1}}}
+\newcommand{\blue}[1]{\textcolor{blueTeam}{\textbf{#1}}}
+
+\title{웹 해킹의 원리}
+\subtitle{SQL Injection · XSS · Brute Force · 그리고 더}
+\author{이선우}
+\institute{KENTECH STIS Lab}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+% ============================================================
+\section{인터넷과 웹}
+% ============================================================
+
+\begin{frame}[shrink=10]{여러분이 매일 하는 것}
+\begin{center}
+\Large
+네이버에 로그인하고, 유튜브에서 영상을 보고,\\
+쿠팡에서 물건을 사고, 인스타에 사진을 올린다.
+\end{center}
+
+\vspace{1em}
+\begin{center}
+이 모든 것이 \hlt{웹 애플리케이션}입니다.
+\end{center}
+
+\vspace{1em}
+\begin{alertblock}{오늘의 질문}
+\Large 이걸 \hlt{해킹}할 수 있을까요?
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{웹은 어떻게 동작할까? — 식당 비유}
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=6pt, minimum width=2.8cm, minimum height=1.2cm, font=\small\bfseries, align=center},
+    arr/.style={-{Stealth[length=6pt]}, thick, coreBlue},
+]
+\node[box, fill=layer1] (you) {여러분\\{\scriptsize (손님)}};
+\node[box, fill=layer2, right=2cm of you] (waiter) {웹 서버\\{\scriptsize (종업원)}};
+\node[box, fill=layer3, right=2cm of waiter] (kitchen) {데이터베이스\\{\scriptsize (주방)}};
+
+\draw[arr] ([yshift=3pt]you.east) -- node[above, font=\scriptsize] {``비빔밥 주세요''} ([yshift=3pt]waiter.west);
+\draw[arr] ([yshift=3pt]waiter.east) -- node[above, font=\scriptsize] {``비빔밥 하나요''} ([yshift=3pt]kitchen.west);
+\draw[arr, intGreen] ([yshift=-3pt]kitchen.west) -- node[below, font=\scriptsize] {비빔밥 완성} ([yshift=-3pt]waiter.east);
+\draw[arr, intGreen] ([yshift=-3pt]waiter.west) -- node[below, font=\scriptsize] {여기요!} ([yshift=-3pt]you.east);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.5em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{식당}
+\begin{itemize}
+    \item 손님이 종업원에게 주문
+    \item 종업원이 주방에 전달
+    \item 주방에서 요리해서 돌려줌
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{웹}
+\begin{itemize}
+    \item 브라우저가 서버에 요청
+    \item 서버가 데이터베이스에 질문
+    \item DB에서 데이터를 찾아 돌려줌
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{진짜로 무슨 일이 일어나는가}
+
+여러분이 ``로그인'' 버튼을 누르면:
+
+\vspace{0.5em}
+\begin{enumerate}
+    \item 브라우저가 서버에 메시지를 보냄 \\
+          {\footnotesize ``아이디는 \texttt{admin}, 비밀번호는 \texttt{1234}입니다''}
+    \item 서버가 데이터베이스에 물어봄 \\
+          {\footnotesize ``\texttt{admin}이고 비밀번호가 \texttt{1234}인 사람이 있어?''}
+    \item 데이터베이스가 대답함 \\
+          {\footnotesize ``네, 있습니다'' 또는 ``아니오, 없습니다''}
+    \item 서버가 결과를 브라우저에 돌려줌 \\
+          {\footnotesize ``로그인 성공!'' 또는 ``실패!''}
+\end{enumerate}
+
+\vspace{0.5em}
+\begin{alertblock}{핵심}
+서버가 데이터베이스에 물어보는 \hlt{질문의 언어}가 바로 \textbf{SQL}입니다.\\
+이 질문을 조작할 수 있으면? → \hlt{해킹}
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{DevTools — 해커의 돋보기}
+
+브라우저에는 ``뒤를 볼 수 있는 도구''가 숨어있습니다.
+
+\vspace{0.5em}
+\begin{block}{DevTools 열기}
+\begin{itemize}
+    \item Chrome에서 \texttt{F12} 키를 누르세요 (또는 \texttt{Ctrl+Shift+I})
+    \item \textbf{Network} 탭: 브라우저가 서버에 보내는 모든 메시지를 볼 수 있음
+    \item \textbf{Console} 탭: JavaScript를 직접 실행할 수 있음
+\end{itemize}
+\end{block}
+
+\vspace{0.5em}
+\begin{block}{왜 중요한가}
+\begin{itemize}
+    \item 웹사이트가 ``뒤에서'' 무슨 일을 하는지 볼 수 있음
+    \item 서버에 어떤 데이터를 보내는지 확인 가능
+    \item 해커들이 가장 먼저 여는 도구
+    \item \hlt{여러분도 지금 열어보세요!} → Juice Shop에서 F12
+\end{itemize}
+\end{block}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=5]{웹 페이지의 주소 — URL과 라우팅}
+
+\begin{block}{URL이란?}
+웹 페이지의 ``주소''. 브라우저 주소창에 보이는 것.
+\begin{itemize}
+    \item \texttt{https://\hlt{www.youtube.com}/watch?v=abc123}
+    \item \texttt{https://} = 통신 방식 \quad \texttt{www.youtube.com} = 서버 주소 \quad \texttt{/watch} = \hlt{페이지 경로}
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{block}{라우팅 = ``어떤 페이지를 보여줄지 결정하는 것''}
+\begin{itemize}
+    \item \texttt{/login} → 로그인 페이지
+    \item \texttt{/products} → 상품 목록 페이지
+    \item \texttt{/admin} → 관리자 페이지 (숨겨져 있을 수도!)
+    \item URL의 경로를 바꾸면 다른 페이지로 이동
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{alertblock}{핵심}
+Juice Shop 같은 앱은 URL에 \texttt{\#/경로}를 사용합니다.\\
+예: \texttt{http://localhost:3000/\hlt{\#/login}} → 로그인 페이지\\
+\hlt{이 경로 목록이 코드(main.js)에 적혀있습니다.} 코드를 읽으면 숨겨진 페이지도 찾을 수 있어요!
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{해킹이란?}
+
+\begin{center}
+\Large
+영화에서 보는 것: 어두운 방에서 키보드를 막 치는 사람\\[0.5em]
+\hlt{실제 해킹}: 시스템이 예상하지 못한 입력을 넣는 것
+\end{center}
+
+\vspace{1em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{비유}
+자판기에 500원을 넣으면 음료수가 나옴\\[0.3em]
+만약 \hlt{특별한 동전}을 넣으면\\모든 음료수가 나온다면?\\[0.3em]
+그게 해킹입니다.
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{웹 해킹}
+로그인 창에 아이디를 넣으면 로그인됨\\[0.3em]
+만약 \hlt{특별한 문자열}을 넣으면\\비밀번호 없이 로그인된다면?\\[0.3em]
+그것이 SQL Injection입니다.
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.5em}
+\begin{alertblock}{주의}
+여기서 배우는 기술은 \hlt{허가된 환경에서만} 사용하세요. 실제 서비스에 시도하면 \hlt{범죄}입니다.\\
+오늘은 연습용 쇼핑몰(Juice Shop)에서만 실습합니다.
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\section{SQL Injection}
+% ============================================================
+
+\begin{frame}[shrink=10]{웹 — 서버 — DB: 어디를 막아야 하는가}
+
+\begin{center}
+\fbox{\parbox{2cm}{\centering\bfseries\small 사용자\\{\scriptsize (브라우저)}}}
+\quad $\rightarrow$ {\scriptsize HTTP} $\rightarrow$ \quad
+\fbox{\parbox{2cm}{\centering\bfseries\small 웹 서버\\{\scriptsize (Node.js)}}}
+\quad $\rightarrow$ {\scriptsize SQL} $\rightarrow$ \quad
+\fbox{\parbox{2.3cm}{\centering\bfseries\small 데이터베이스\\{\scriptsize (SQLite)}}}
+\end{center}
+
+\vspace{0.3em}
+\begin{center}
+{\footnotesize
+\textcolor{redTeam}{\textbf{XSS} $\uparrow$} \hspace{2.5cm}
+\textcolor{redTeam}{\textbf{서버 취약점} $\uparrow$} \hspace{2.5cm}
+\textcolor{redTeam}{\textbf{SQLi} $\uparrow$}
+}
+\end{center}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.32\textwidth}
+\begin{block}{브라우저 (입구)}
+\begin{itemize}
+    \item XSS: 악성 스크립트 실행
+    \item 쿠키/세션 탈취
+    \item 사용자를 속이는 공격
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.32\textwidth}
+\begin{block}{서버 (중간)}
+\begin{itemize}
+    \item 입력값 검증의 핵심
+    \item 여기서 막아야 DB가 안전
+    \item \hlt{IDS가 감시하는 지점}
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.32\textwidth}
+\begin{block}{DB (최종 목표)}
+\begin{itemize}
+    \item SQLi: 데이터 전체 유출
+    \item 개인정보, 비밀번호
+    \item 여기가 뚫리면 끝
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=5]{SQL이란? — 데이터베이스에 질문하는 언어}
+
+데이터베이스는 표(엑셀)처럼 생겼습니다:
+
+\vspace{0.3em}
+\begin{center}
+\begin{tabular}{rlll}
+\toprule
+\textbf{id} & \textbf{email} & \textbf{password} & \textbf{role} \\
+\midrule
+1 & admin@juice-sh.op & 0192023a7bbd... & admin \\
+2 & jim@juice-sh.op & e541b4680... & customer \\
+3 & bender@juice-sh.op & 0c36e517... & customer \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{0.3em}
+이 표에서 데이터를 찾으려면 \textbf{SQL}로 질문합니다:
+
+\vspace{0.3em}
+\begin{block}{예시}
+\begin{itemize}
+    \item ``admin의 정보를 찾아줘'' \\
+          → \texttt{SELECT * FROM Users WHERE email = 'admin@juice-sh.op'}
+    \item ``비밀번호가 맞는지 확인해줘'' \\
+          → \texttt{... AND password = '1234'}
+\end{itemize}
+\end{block}
+
+{\footnotesize \textbf{SELECT} = 찾아줘 \quad \textbf{FROM} = 이 표에서 \quad \textbf{WHERE} = 조건은}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=5]{로그인할 때 무슨 일이 일어나는가}
+
+\begin{center}
+여러분이 이메일에 \texttt{admin@juice-sh.op}, 비밀번호에 \texttt{1234}를 입력하면:
+\end{center}
+
+\vspace{0.5em}
+\begin{center}
+\colorbox{layer2}{\parbox{0.85\textwidth}{\ttfamily\small
+SELECT * FROM Users WHERE email = \red{'admin@juice-sh.op'} AND password = \red{'1234'}
+}}
+\end{center}
+
+\vspace{0.5em}
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=4pt, minimum height=0.8cm, font=\footnotesize, align=center},
+    arr/.style={-{Stealth[length=5pt]}, thick},
+]
+\node[box, fill=layer1] (input) {여러분의 입력};
+\node[box, fill=layer3, right=1.5cm of input] (query) {SQL 쿼리에 삽입};
+\node[box, fill=intGreen!20, right=1.5cm of query] (result) {결과 반환};
+\draw[arr] (input) -- (query);
+\draw[arr] (query) -- (result);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.3em}
+\begin{alertblock}{문제점}
+여러분이 입력한 값이 SQL 쿼리에 \hlt{그대로} 들어갑니다.\\
+그러면... 만약 입력값에 \hlt{SQL 명령어}를 넣으면?
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=5]{SQL Injection — 마법의 문자열}
+
+이메일 칸에 이렇게 입력하면 어떻게 될까요?
+
+\vspace{0.3em}
+\begin{center}
+\Large \texttt{\red{' OR 1=1--}}
+\end{center}
+
+\vspace{0.3em}
+서버가 만드는 SQL 쿼리:
+
+\vspace{0.3em}
+\begin{center}
+\colorbox{layer3}{\parbox{0.85\textwidth}{\ttfamily\small
+SELECT * FROM Users WHERE email = \red{'' OR 1=1--}' AND password = '1234'
+}}
+\end{center}
+
+\vspace{0.5em}
+\begin{columns}[T]
+\begin{column}{0.55\textwidth}
+\begin{block}{한 글자씩 뜯어보기}
+\begin{enumerate}
+    \item \texttt{\red{'}} → 이메일 문자열을 \hlt{닫아버림}
+    \item \texttt{\red{OR 1=1}} → ``또는 1은 1이다'' \\
+          1은 1이니까 \hlt{항상 참}!
+    \item \texttt{\red{--}} → 뒤에 오는 건 \hlt{주석} (무시됨)\\
+          비밀번호 검사가 사라짐!
+\end{enumerate}
+\end{block}
+\end{column}
+\begin{column}{0.42\textwidth}
+\begin{alertblock}{결과}
+\begin{itemize}
+    \item WHERE 조건이 항상 참
+    \item \hlt{모든 사용자}가 반환됨
+    \item 첫 번째 사용자 = admin
+    \item → \red{비밀번호 없이 admin으로 로그인!}
+\end{itemize}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=3]{SQL Injection — 왜 위험한가}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{로그인 우회뿐만이 아닙니다}
+UNION SELECT라는 것을 쓰면\\
+\hlt{다른 테이블의 데이터}도 읽을 수 있습니다:
+
+\vspace{0.3em}
+\begin{itemize}
+    \item 모든 사용자의 이메일
+    \item 비밀번호 해시
+    \item 신용카드 정보
+    \item 주소, 전화번호 등
+\end{itemize}
+
+\vspace{0.3em}
+{\footnotesize SQL 한 줄로 전체 데이터베이스를 읽을 수 있음}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{실제 사례}
+\begin{itemize}
+    \item \textbf{2011 Sony}: PlayStation Network 7,700만 명 정보 유출
+    \item \textbf{2015 TalkTalk}: 영국 통신사 15만 명 정보 유출
+    \item \textbf{2019 Fortnite}: SQL Injection으로 계정 탈취 가능
+    \item OWASP Top 10에서 수년간 \#1
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{alertblock}{핵심}
+\hlt{사용자 입력을 신뢰하면 안 된다}\\
+입력값을 SQL에 그대로 넣으면 안 됨
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=3]{UNION SELECT — 데이터를 훔치는 기술}
+
+로그인 우회보다 \hlt{더 무서운} SQL Injection이 있습니다.
+
+\vspace{0.3em}
+\begin{block}{UNION SELECT란?}
+두 개의 SELECT 결과를 \hlt{합쳐서} 보여주는 SQL 문법.\\
+원래 쿼리 결과에 \textbf{다른 테이블의 데이터를 붙입니다}.
+\end{block}
+
+\vspace{0.3em}
+\begin{block}{실습: 브라우저 주소창에 직접 입력}
+{\ttfamily\tiny
+http://localhost:3000/rest/products/search?q=\red{x'))UNION+SELECT+id,email,password,4,5,6,7,8,9+FROM+Users--}
+}
+\vspace{0.2em}
+\begin{itemize}
+    \item \texttt{x'))} → Juice Shop 검색 쿼리의 괄호를 닫아줌 (쿼리가 \texttt{'\%검색어\%'))} 형태)
+    \item \texttt{UNION SELECT ...} → Users 테이블의 데이터를 붙임
+    \item \texttt{--} → 나머지 쿼리를 주석 처리
+    \item 결과: 상품 대신 \hlt{이메일 + 비밀번호 해시}가 나옴!
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{alertblock}{주의}
+검색창에 직접 타이핑하면 \textbf{안 될 수 있습니다} (프론트엔드가 변환).\\
+\hlt{브라우저 주소창에 위 URL을 그대로 붙여넣기}하세요!
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{SQLi 방어 방법}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{1. Prepared Statement (파라미터 바인딩)}
+\begin{itemize}
+    \item 입력값을 SQL에 직접 넣지 않음
+    \item ``여기에 값이 들어갈 자리''를 미리 정해둠
+    \item 입력값이 뭐든 \hlt{문자열로만} 처리됨
+    \item → SQL 명령어로 해석 안 됨!
+\end{itemize}
+\vspace{0.2em}
+{\scriptsize 안전한 코드: \texttt{SELECT * FROM Users WHERE email = ?}}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{2. 입력값 검증}
+\begin{itemize}
+    \item 이메일 형식이 맞는지 확인
+    \item 특수문자 (\texttt{'}, \texttt{--}, \texttt{\#}) 필터링
+    \item 길이 제한
+\end{itemize}
+\end{block}
+\vspace{0.3em}
+\begin{block}{3. 최소 권한 원칙}
+\begin{itemize}
+    \item DB 계정에 최소한의 권한만 부여
+    \item 웹앱 계정이 모든 테이블을 읽을 필요 없음
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.3em}
+{\footnotesize Juice Shop은 \hlt{일부러 이런 방어를 안 해놓은} 연습용 사이트입니다.\\
+실제 서비스에서는 위 방법들을 반드시 적용해야 합니다.}
+\end{frame}
+
+% ============================================================
+\begin{frame}{실습: 브라우저에서 SQLi — 안 된다?!}
+
+\begin{block}{시도해봅시다}
+\begin{enumerate}
+    \item \texttt{http://localhost:3000/\#/login} 접속
+    \item Email에 \texttt{' OR 1=1--} 입력
+    \item Password에 아무거나 → Log in 클릭
+    \item → \red{안 됨!} 로그인 버튼이 비활성화되거나 에러
+\end{enumerate}
+\end{block}
+
+\vspace{0.5em}
+\begin{block}{왜 안 되는가?}
+\begin{itemize}
+    \item Juice Shop의 로그인 화면은 \textbf{프론트엔드(브라우저)}에서 이메일 형식을 검사
+    \item \texttt{' OR 1=1--}은 이메일 형식이 아님 → 입력 자체를 거부
+    \item 이것은 \textbf{서버가 막는 게 아니라}, \hlt{브라우저가 막는 것}
+\end{itemize}
+\end{block}
+
+\vspace{0.5em}
+\begin{alertblock}{그러면 진짜 안전한 건가요?}
+\hlt{아닙니다!} 해커는 브라우저를 안 씁니다.\\
+서버에 \textbf{직접 요청}을 보내면 브라우저 검증은 의미가 없습니다.\\
+→ 다음 슬라이드에서 확인!
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile]{실습: Juice Shop에서 SQLi 해보기 — 터미널 (curl)}
+
+브라우저 없이, \textbf{터미널(cmd/PowerShell)}에서도 공격할 수 있습니다:
+
+\vspace{0.3em}
+\begin{lstlisting}[language=bash]
+# Windows cmd
+curl -X POST http://localhost:3000/rest/user/login ^
+  -H "Content-Type: application/json" ^
+  -d "{\"email\":\"' OR 1=1--\",\"password\":\"x\"}"
+
+# Linux / Mac
+curl -X POST http://localhost:3000/rest/user/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"'"'"' OR 1=1--","password":"x"}'
+\end{lstlisting}
+
+\vspace{0.3em}
+\begin{block}{결과}
+{\ttfamily\scriptsize
+\{"authentication":\{"token":"eyJ0eXAi...",\textcolor{accent}{"umail":"admin@juice-sh.op"}\}\}
+}
+\end{block}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{왜 터미널에서는 바로 되나?}
+\begin{itemize}
+    \item curl은 서버에 \hlt{직접} 요청을 보냄
+    \item 브라우저의 이메일 형식 검증 없음
+    \item 서버는 검증을 안 하니까 그대로 실행
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{alertblock}{핵심 교훈}
+\begin{itemize}
+    \item 브라우저 검증 = \textbf{사용자 편의}
+    \item 서버 검증 = \textbf{진짜 보안}
+    \item 해커는 브라우저를 안 씀
+    \item \hlt{서버에서 막아야 합니다!}
+\end{itemize}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile,shrink=10]{SQLi PoC 코드 — 자동화된 공격}
+
+브라우저에서 수동으로 하는 것 외에, \textbf{프로그램}으로도 공격할 수 있습니다:
+
+\vspace{0.2em}
+\begin{lstlisting}[language=Python]
+import requests, json
+
+TARGET = "http://juice-shop:3000"
+
+# SQL Injection payload
+payload = {"email": "' OR 1=1--", "password": "anything"}
+
+resp = requests.post(f"{TARGET}/rest/user/login", json=payload)
+
+if resp.status_code == 200:
+    data = resp.json()
+    token = data["authentication"]["token"]
+    email = data["authentication"]["umail"]
+    print(f"[+] SUCCESS! Login bypassed!")
+    print(f"[+] User: {email}")
+    print(f"[+] Token: {token[:50]}...")
+\end{lstlisting}
+
+\vspace{0.2em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{코드가 하는 일}
+\begin{itemize}
+    \item 로그인 API에 POST 요청
+    \item email에 \texttt{' OR 1=1--} 삽입
+    \item 응답에서 토큰 추출
+    \item → 브라우저 없이도 공격 가능!
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{왜 자동화하는가}
+\begin{itemize}
+    \item 다양한 payload를 빠르게 시도
+    \item 수백 개 사이트를 동시에 테스트
+    \item 결과를 프로그램적으로 처리
+    \item 실제 해커/보안 전문가 모두 사용
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile,shrink=5]{대시보드에서 실행하면 — 실제 결과}
+
+우리 실습 대시보드에서 ``SQL Injection - Login Bypass''의 \texttt{[Run]} 버튼을 클릭하면:
+
+\vspace{0.2em}
+{\ttfamily\tiny
+\colorbox{black!90}{\textcolor{white}{\parbox{0.93\textwidth}{
+\textcolor{coreBlue}{[run]} Starting "SQL Injection - Login Bypass"...\\
+{[*]} Target: http://juice-shop:3000\\[2pt]
+{[*]} Sending POST to http://juice-shop:3000/rest/user/login\\
+{[*]} Payload: \{"email": "' OR 1=1--", "password": "anything"\}\\[2pt]
+{[*]} Status Code: \textcolor{intGreen}{200}\\
+{[*]} Response: \{"authentication": \{"token": "eyJ0eXAiOi...", "umail": "\textcolor{accent}{admin@juice-sh.op}"\}\}\\[2pt]
+\textcolor{intGreen}{[+] SUCCESS! Login bypassed!}\\
+\textcolor{intGreen}{[+] User Email: admin@juice-sh.op}\\
+\textcolor{intGreen}{[+] Auth Token: eyJ0eXAiOiJKV1Qi...}\\[2pt]
+{[*]} Attack complete. Check Suricata alerts for SID 100001.\\
+\textcolor{coreBlue}{[run]} "SQL Injection - Login Bypass" completed.
+}}}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{결과 해석}
+\begin{itemize}
+    \item Status 200 = 서버가 로그인 성공 응답
+    \item \texttt{umail: admin@juice-sh.op}\\
+          → \hlt{admin 계정으로 로그인됨}
+    \item JWT 토큰이 반환됨\\
+          → 이 토큰으로 admin 권한 사용 가능
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{동시에 일어나는 일}
+\begin{itemize}
+    \item 대시보드 \textbf{Terminal}에 실행 로그 표시
+    \item \textbf{Live Monitor}에 IDS 탐지 알림:\\
+          {\scriptsize ``SQL Injection Detected (Login Bypass)''}
+    \item 공격과 탐지를 \hlt{한 화면}에서 확인
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\section{XSS (Cross-Site Scripting)}
+% ============================================================
+
+\begin{frame}{웹 페이지는 어떻게 만들어지는가}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{HTML = 웹 페이지의 뼈대}
+\begin{itemize}
+    \item 웹 페이지는 \textbf{HTML}이라는 언어로 만들어짐
+    \item 브라우저가 HTML을 읽고 화면에 그려줌
+    \item 예: \texttt{<h1>제목</h1>} → 큰 글씨 제목
+    \item 예: \texttt{<img src="cat.jpg">} → 이미지
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{JavaScript = 웹 페이지의 두뇌}
+\begin{itemize}
+    \item HTML 안에서 \textbf{프로그램}을 실행할 수 있음
+    \item \texttt{<script>alert('안녕')</script>}\\
+          → 팝업이 뜸!
+    \item 쿠키 읽기, 화면 바꾸기, 데이터 전송 등 가능
+    \item 브라우저가 자동으로 실행함
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.5em}
+\begin{alertblock}{핵심}
+브라우저는 HTML에 적힌 것을 \hlt{무조건 실행}합니다.\\
+만약 해커가 HTML에 \hlt{악성 스크립트를 끼워넣으면}? → XSS
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{XSS — 비유로 이해하기}
+
+\begin{center}
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners=6pt, minimum width=3cm, minimum height=1cm, font=\small\bfseries, align=center},
+    arr/.style={-{Stealth[length=5pt]}, thick},
+]
+\node[box, fill=layer1] (board) {학교 게시판};
+\node[box, fill=layer3, right=3cm of board] (student) {다른 학생};
+
+\node[font=\footnotesize, below=0.3cm of board, text width=4cm, align=center] {해커가 게시글에\\``읽으면 자동으로 학생증\\사진이 전송되는'' 코드를 숨김};
+
+\draw[arr, redTeam] (board) -- node[above, font=\scriptsize] {게시글 열람} (student);
+\node[font=\footnotesize, below=0.3cm of student, text width=3cm, align=center, accent] {학생의 브라우저에서\\코드가 실행됨!};
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.5em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{게시판 비유}
+\begin{itemize}
+    \item 게시판에 글을 씀
+    \item 글 안에 \hlt{실행되는 코드}를 숨김
+    \item 다른 사람이 글을 읽으면 코드가 실행
+    \item 그 사람의 정보가 해커에게 전송
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{웹에서는}
+\begin{itemize}
+    \item 검색창, 리뷰, 댓글 등에 입력
+    \item 입력값 안에 \texttt{<script>...} 삽입
+    \item 다른 사용자가 보면 스크립트 실행
+    \item 쿠키(로그인 정보) 탈취 가능
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=5]{XSS — 어떻게 동작하는가}
+
+Juice Shop 검색창에 ``apple''을 검색하면:
+
+\vspace{0.3em}
+\begin{center}
+\colorbox{layer2}{\parbox{0.7\textwidth}{\ttfamily\small
+화면에 표시: ``검색 결과: \textbf{apple}''
+}}
+\end{center}
+
+\vspace{0.3em}
+검색어가 화면에 \hlt{그대로} 표시됩니다. 그러면...
+
+\vspace{0.3em}
+검색창에 이걸 입력하면?
+
+\vspace{0.3em}
+\begin{center}
+\colorbox{layer3}{\parbox{0.7\textwidth}{\ttfamily\small
+\red{<iframe src="javascript:alert('해킹!')">}
+}}
+\end{center}
+
+\vspace{0.3em}
+\begin{center}
+\colorbox{accent!10}{\parbox{0.7\textwidth}{\ttfamily\small
+화면에 표시: ``검색 결과: \red{<iframe src="javascript:alert('해킹!')">}''\\[0.2em]
+→ 브라우저가 이것을 HTML로 해석 → \hlt{스크립트가 실행됨!} → 팝업!
+}}
+\end{center}
+
+\vspace{0.3em}
+\begin{alertblock}{핵심}
+SQLi와 같은 원리: \hlt{사용자 입력을 그대로 HTML에 넣으면} 공격당함
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{XSS — 3가지 유형}
+
+\begin{columns}[T]
+\begin{column}{0.32\textwidth}
+\begin{block}{Reflected (반사형)}
+\begin{itemize}
+    \item URL에 스크립트를 넣어서 보냄
+    \item 피해자가 그 링크를 클릭하면 실행
+    \item 1회성
+\end{itemize}
+\vspace{0.3em}
+{\footnotesize 예: 피싱 메일에\\악성 URL 포함}
+\end{block}
+\end{column}
+\begin{column}{0.32\textwidth}
+\begin{block}{DOM-based}
+\begin{itemize}
+    \item 브라우저가 직접 페이지를 수정하는 과정에서 실행
+    \item 서버를 거치지 않음
+    \item 프론트엔드 취약점
+\end{itemize}
+\vspace{0.3em}
+{\footnotesize 예: 검색어를\\innerHTML로 삽입}
+\end{block}
+\end{column}
+\begin{column}{0.32\textwidth}
+\begin{block}{\red{Stored (저장형)}}
+\begin{itemize}
+    \item DB에 저장됨
+    \item 다른 사용자가 볼 때마다 실행
+    \item \hlt{가장 위험}
+    \item 공격자가 없어도 계속 동작
+\end{itemize}
+\vspace{0.3em}
+{\footnotesize 예: 리뷰에 스크립트 삽입}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.5em}
+\begin{alertblock}{XSS로 할 수 있는 것}
+쿠키 탈취(계정 탈취) · 가짜 로그인 폼(피싱) · 사용자 행동 조작 · 악성 사이트 리다이렉트
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{실습: XSS Tier 1 — DOM XSS (난이도 $\star$)}
+
+Juice Shop의 Score Board에 가면 이 challenge가 있습니다:\\
+``Perform a DOM XSS attack''
+
+\vspace{0.3em}
+\begin{block}{어디에서 공격할 수 있을까?}
+\begin{itemize}
+    \item Juice Shop 상단에 \textbf{검색 돋보기} 아이콘이 있음
+    \item 검색을 하면 검색어가 화면에 \hlt{그대로 표시}됨
+    \item ``apple'' 검색 → 화면에 ``Search Results - apple'' 표시
+    \item 그러면... HTML 코드를 넣으면?
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{block}{공격 실행}
+\begin{enumerate}
+    \item 검색 돋보기 클릭
+    \item 검색창에 입력:\\[0.2em]
+          {\footnotesize\texttt{\red{<iframe src="javascript:alert(`xss`)">}}}
+    \item Enter
+    \item → \hlt{팝업 알림이 뜸} = XSS 성공!
+    \item 화면을 자세히 보면 → 검색 결과 영역에 \hlt{작은 iframe 창}이 생긴 것도 확인 가능
+\end{enumerate}
+\end{block}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=15]{XSS Tier 1 — 왜 동작하는가}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{기술적 이유}
+\begin{enumerate}
+    \item Juice Shop이 검색어를 표시할 때
+    \item JavaScript의 \texttt{innerHTML}을 사용
+    \item \texttt{innerHTML}은 문자열을 \hlt{HTML로 해석}
+    \item 그래서 \texttt{<iframe>} 태그가 실제 HTML로 실행됨
+    \item iframe의 \texttt{src}에 \texttt{javascript:}를 넣었으니\\
+          → JavaScript 코드가 실행!
+\end{enumerate}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{결과 확인}
+\begin{itemize}
+    \item 팝업(\texttt{alert})이 뜸 → XSS 증명
+    \item 검색 결과 영역에 \hlt{작은 iframe 창}이 생김\\
+          {\footnotesize (조그맣게 빈 창이 보일 수 있음)}
+    \item Score Board에서 초록색 체크 확인!
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{alertblock}{이것의 의미}
+\begin{itemize}
+    \item \texttt{alert}은 데모용. 실제로는:
+    \item \texttt{document.cookie} → 쿠키 탈취
+    \item 외부 서버로 데이터 전송 가능
+    \item 피해자가 이 URL을 클릭하면 실행됨
+\end{itemize}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{XSS로 쿠키를 훔치면?}
+
+\texttt{alert}은 ``XSS가 가능하다''는 증명일 뿐입니다.\\
+실제 공격자는 \hlt{쿠키(세션 토큰)}를 훔칩니다:
+
+\vspace{0.3em}
+\begin{block}{쿠키란?}
+\begin{itemize}
+    \item 로그인하면 서버가 브라우저에 ``열쇠''를 줌 → 이것이 쿠키/토큰
+    \item 매번 요청할 때 이 열쇠를 같이 보냄 → 서버가 ``아, 로그인된 사용자구나'' 인식
+    \item \hlt{이 열쇠를 훔치면?} → 그 사람인 척 로그인 가능!
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+\begin{block}{XSS + 쿠키 탈취 시나리오}
+\begin{enumerate}
+    \item 공격자가 게시글에 \texttt{<script>document.cookie를 외부로 전송</script>} 삽입
+    \item 피해자가 게시글을 열람
+    \item 피해자의 브라우저에서 스크립트 실행 → 쿠키가 공격자 서버로 전송!
+    \item 공격자가 훔친 쿠키로 피해자 계정에 접속
+\end{enumerate}
+\end{block}
+\end{frame}
+
+% ============================================================
+\begin{frame}{XSS 방어 방법}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{1. 출력 이스케이프}
+\begin{itemize}
+    \item 사용자 입력을 HTML에 넣을 때
+    \item \texttt{<} → \texttt{\&lt;} 로 변환
+    \item \texttt{>} → \texttt{\&gt;} 로 변환
+    \item → 브라우저가 태그로 인식하지 않음
+\end{itemize}
+\end{block}
+\vspace{0.3em}
+\begin{block}{2. Content Security Policy (CSP)}
+\begin{itemize}
+    \item ``이 페이지에서 허용된 스크립트만 실행해라''
+    \item 외부 스크립트 차단
+    \item 인라인 스크립트 제한
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{3. HttpOnly 쿠키}
+\begin{itemize}
+    \item 쿠키에 HttpOnly 플래그 설정
+    \item JavaScript에서 \texttt{document.cookie}로\\접근 불가
+    \item XSS로 쿠키를 못 훔침!
+\end{itemize}
+\end{block}
+\vspace{0.3em}
+\begin{block}{4. innerHTML 대신 textContent}
+\begin{itemize}
+    \item \texttt{innerHTML}: HTML로 해석 (위험!)
+    \item \texttt{textContent}: 순수 텍스트 (안전)
+    \item Juice Shop은 innerHTML을 써서 취약
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{XSS — 더 생각해보기}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{exampleblock}{실험해보세요}
+\begin{itemize}
+    \item 주소창을 확인 — 검색어가 URL에 포함되어 있나요?\\
+          {\footnotesize \texttt{\#/search?q=<iframe...>} 형태}
+    \item 이 URL을 복사해서 새 탭에 붙여넣기 하면?\\
+          → 같은 공격이 다시 실행됨!
+    \item 이 URL을 다른 사람에게 보내면?\\
+          → \hlt{그 사람의 브라우저에서 실행됨}
+    \item 이것이 바로 \textbf{Reflected/DOM XSS}의 위험
+\end{itemize}
+\end{exampleblock}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{다른 payload도 시도해보세요}
+\begin{itemize}
+    \item \texttt{<img src=x onerror=alert(1)>}\\
+          {\footnotesize 이미지 로드 실패 → 스크립트 실행}
+    \item \texttt{<b>굵은 글씨</b>}\\
+          {\footnotesize HTML이 실행되는지 확인}
+    \item \texttt{<h1>해킹됨!</h1>}\\
+          {\footnotesize 화면이 바뀌는지 확인}
+\end{itemize}
+
+\vspace{0.3em}
+{\footnotesize 다양한 태그를 넣어보면서\\``어디까지 실행되는가''를 탐색해보세요.\\이것이 해커가 하는 일입니다.}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\section{Gemini로 탐지 우회하기}
+% ============================================================
+
+\begin{frame}[shrink=5]{AI에게 물어보자 — ``이 규칙을 우회해줘''}
+
+\begin{center}
+\Large
+IDS 탐지 규칙을 보고, \hlt{AI(Gemini)에게 우회 방법}을 물어봅시다.
+\end{center}
+
+\vspace{0.5em}
+\begin{block}{시나리오}
+\begin{enumerate}
+    \item 우리 대시보드에서 SQLi 탐지 규칙을 확인
+    \item 그 규칙을 Gemini에게 보여줌
+    \item ``이 규칙을 우회하도록 PoC를 수정해줘'' 요청
+    \item Gemini가 만든 우회 PoC를 대시보드에서 실행
+    \item 탐지되는지 확인!
+\end{enumerate}
+\end{block}
+
+\vspace{0.3em}
+\begin{alertblock}{왜 이걸 해보는가}
+\begin{itemize}
+    \item AI가 공격에도 활용될 수 있다는 것을 체험
+    \item 규칙 기반 방어의 한계를 직접 확인
+    \item ``공격자도 AI를 쓴다면, 방어자는 어떻게 해야 하는가?''
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile]{Step 1: SQLi 탐지 규칙 확인}
+
+대시보드 Defense Panel에서 SQLi 탐지 규칙을 확인합니다:
+
+\vspace{0.3em}
+{\ttfamily\tiny
+\colorbox{black!90}{\textcolor{white}{\parbox{0.93\textwidth}{
+alert http any any -> \$HOME\_NET \$HTTP\_PORTS (\\
+\quad msg:"[LAB] SQL Injection Attempt Detected";\\
+\quad flow:to\_server,established;\\
+\quad content:"SELECT"; nocase; http\_uri;\\
+\quad pcre:"/(\\textbackslash\%27)|(')|(--)|(\\\#)/i";\\
+\quad classtype:web-application-attack; sid:100001; rev:1;)
+}}}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{이 규칙이 찾는 것}
+\begin{itemize}
+    \item HTTP URI에 \texttt{SELECT} 문자열
+    \item \texttt{'} (싱글 쿼트)
+    \item \texttt{--} (SQL 주석)
+    \item \texttt{\#} (MySQL 주석)
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{Gemini에게 물어볼 것}
+{\footnotesize
+``이 Suricata 규칙을 보여줄게.\\
+이 규칙을 우회하면서도\\
+SQL Injection이 성공하도록\\
+공격 스크립트를 수정해줘.''
+}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile]{Step 2: Gemini가 알려주는 우회 방법}
+
+Gemini에게 규칙과 PoC를 보여주고 우회를 요청하면:
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{\red{기존 공격} (탐지됨)}
+{\ttfamily\scriptsize
+\{"email": "\red{' OR 1=1--}",\\
+\quad"password": "x"\}
+}
+\vspace{0.2em}
+\begin{itemize}
+    \item \texttt{'} → 규칙에 걸림
+    \item \texttt{--} → 규칙에 걸림
+    \item Suricata 경보 발생!
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{\textcolor{intGreen}{\textbf{Gemini의 우회 제안}}}
+{\ttfamily\scriptsize
+\{"email": "\textcolor{intGreen}{' OR '1'='1}",\\
+\quad"password": "x"\}
+}
+\vspace{0.2em}
+\begin{itemize}
+    \item \texttt{--} 주석을 안 씀
+    \item \texttt{SELECT}도 없음
+    \item 규칙의 pcre 패턴 일부만 매칭
+    \item 규칙 설정에 따라 \hlt{통과할 수 있음}!
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{alertblock}{Gemini의 핵심 조언}
+\begin{itemize}
+    \item 규칙이 찾는 \textbf{특정 문자열을 피하면} 우회 가능
+    \item SQL에서 같은 결과를 내는 \textbf{다른 문법}이 많음
+    \item 예: \texttt{OR 1=1} 대신 \texttt{OR '1'='1'}, \texttt{OR 2>1}, \texttt{OR true}
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile,shrink=5]{Gemini의 실제 답변 — 우회 코드}
+
+Gemini에게 PoC와 규칙을 보여주고 ``이 룰을 우회해줘''라고 하면:
+
+\vspace{0.2em}
+\begin{block}{Gemini의 답변 (요약)}
+{\scriptsize
+``규칙이 \texttt{<script}만 찾으므로, 공격자는 \textbf{대체 태그}를 사용해 우회할 수 있습니다.
+브라우저에서 자바스크립트를 실행하는 방법은 수백 가지입니다.''}
+\end{block}
+
+\vspace{0.2em}
+\begin{lstlisting}[language=Python,title={\scriptsize Gemini가 만든 우회 코드}]
+import requests, urllib.parse
+
+TARGET = "http://juice-shop:3000"
+
+# <script> 대신 <img> 태그의 onerror 사용
+bypass_payload = '<img src=x onerror="alert(`xss`)">'
+encoded = urllib.parse.quote(bypass_payload)
+
+# 헤더에서도 <script> 대신 <svg> 사용
+headers = {
+    "User-Agent": "Mozilla/5.0 <svg/onload=alert(1)>",
+    "Referer": f"{TARGET}/search?q={encoded}"
+}
+
+resp = requests.get(
+    f"{TARGET}/rest/products/search?q={encoded}",
+    headers=headers, timeout=10)
+print(f"[+] Status: {resp.status_code}")
+print("[+] Suricata SID 100003 우회 완료!")
+\end{lstlisting}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=3]{Gemini의 설명 — 우회 전략 3가지}
+
+\begin{columns}[T]
+\begin{column}{0.32\textwidth}
+\begin{block}{1. 대체 태그 사용}
+{\scriptsize
+\texttt{<img onerror=alert(1)>}\\
+\texttt{<svg onload=alert(1)>}\\
+\texttt{<details ontoggle=...>}\\[3pt]
+규칙은 \texttt{<script}만 찾음\\
+→ 다른 태그로 똑같이 실행
+}
+\end{block}
+\end{column}
+\begin{column}{0.32\textwidth}
+\begin{block}{2. 인코딩}
+{\scriptsize
+URL 이중 인코딩:\\
+\texttt{\%253cscript}\\[3pt]
+HTML 엔티티:\\
+\texttt{\&lt;script}\\[3pt]
+네트워크 단에서 원본을\\못 읽게 만듦
+}
+\end{block}
+\end{column}
+\begin{column}{0.32\textwidth}
+\begin{block}{3. Null Byte}
+{\scriptsize
+\texttt{<scr\%00ipt>}\\[3pt]
+문자열 중간에 널 바이트 삽입\\
+→ 일부 탐지기가\\문자열 인식을 못 함
+}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{alertblock}{Gemini의 결론}
+``실습 환경에서 \texttt{<img>} 태그로 수정된 스크립트를 실행한 뒤, Suricata 로그에 Alert이 뜨는지 확인해보세요.
+\hlt{아마 조용할 겁니다!} 그게 바로 보안 장비의 허점입니다.''
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=3]{Gemini에게 Bot 탐지 우회도 물어보면}
+
+XSS뿐만 아니라, \textbf{Bot 탐지 규칙}도 우회할 수 있는지 물어봤습니다:
+
+\vspace{0.3em}
+\begin{block}{Gemini에게 보여준 규칙 (SID 100008)}
+{\scriptsize
+``10초 안에 같은 IP에서 GET 요청이 30번 넘으면 → 봇으로 판정''
+}
+\end{block}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{\red{탐지되는 봇}}
+\begin{itemize}
+    \item 1초에 10번 요청 (0.1초 간격)
+    \item 10초면 100번 → 임계치 초과!
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{\textcolor{intGreen}{\textbf{Gemini의 우회 방법}}}
+\begin{itemize}
+    \item 요청 간격을 0.5$\sim$1.2초로 늘림
+    \item 랜덤 지연 (사람처럼 보이게)
+    \item 10초에 10번 이하 → 통과!
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.3em}
+\begin{alertblock}{Gemini의 설명}
+{\scriptsize ``\texttt{time.sleep()}을 사용하여 요청 간격을 벌리세요. 무작위 지연을 주면 사람의 브라우징 패턴과 유사하게 보입니다. 이것을 \textbf{Low and Slow} 공격이라고 합니다. 속도 기반 탐지는 느린 공격에 무력합니다.''}
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Gemini 대화 요약 — 공격자와 방어자 모두 AI를 쓴다}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{공격자가 Gemini에게 물어본 것}
+\begin{enumerate}
+    \item PoC 코드와 탐지 규칙을 보여줌
+    \item ``이 규칙을 우회해줘'' 요청
+    \item Gemini가 \hlt{대체 태그}, \hlt{속도 조절} 등 우회법 제안
+    \item 우회 코드까지 작성해줌
+\end{enumerate}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{방어자가 Gemini에게 물어본 것}
+\begin{enumerate}
+    \item ``우회된 공격을 잡을 규칙을 만들어줘''
+    \item Gemini가 \hlt{이벤트 핸들러 감시} 규칙 제안
+    \item ``\texttt{onerror}, \texttt{onload}도 잡아야 한다''
+    \item 정규식(pcre) 기반 규칙 제안
+\end{enumerate}
+\end{block}
+\end{column}
+\end{columns}
+
+\vspace{0.5em}
+\begin{alertblock}{핵심 교훈}
+\begin{itemize}
+    \item AI는 \hlt{도구}입니다 — 공격에도, 방어에도 쓸 수 있음
+    \item 하지만 규칙 기반(패턴 매칭)은 결국 \hlt{창과 방패의 반복}
+    \item ``패턴''이 아니라 ``\hlt{행동}''을 학습하는 AI IDS가 필요한 이유
+\end{itemize}
+\end{alertblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}{Step 3: 대시보드에서 우회 PoC 실행}
+
+\begin{enumerate}
+    \item 대시보드 Attack Panel → \texttt{[+ New Attack]}
+    \item Gemini가 만든 우회 코드를 붙여넣기
+    \item \texttt{[Save]} → \texttt{[Run]}
+    \item Terminal에서 결과 확인: 로그인 성공?
+    \item Monitor에서 확인: 탐지 알림이 뜨는가?
+\end{enumerate}
+
+\vspace{0.5em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{탐지가 안 되면}
+\begin{itemize}
+    \item \hlt{규칙 우회 성공!}
+    \item 규칙이 모든 변형을 커버하지 못함
+    \item 방어자는 규칙을 \textbf{업데이트}해야 함
+    \item → 끝없는 \hlt{창과 방패}의 싸움
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{여기서 배우는 것}
+\begin{itemize}
+    \item AI가 \textbf{공격에도} 활용될 수 있다
+    \item 규칙 기반 방어는 \textbf{한계}가 있다
+    \item 공격자가 AI를 쓴다면\\방어자도 AI를 써야 한다
+    \item → \textbf{AI IDS}의 필요성
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\section{실습 문제}
+% ============================================================
+
+\begin{frame}{실습 문제 0: Score Board를 찾아라!}
+
+Juice Shop에는 \hlt{숨겨진 페이지}가 있습니다.\\
+그 페이지를 찾으면 모든 문제(challenge) 목록과 진행도를 볼 수 있습니다.
+
+\vspace{0.5em}
+\begin{block}{미션}
+Score Board 페이지를 찾아서 접속하세요.\\
+메뉴에는 보이지 않습니다. \hlt{코드를 분석}해서 찾아야 합니다.
+\end{block}
+
+\vspace{0.5em}
+\begin{block}{힌트: 단계별}
+\begin{enumerate}
+    \item Juice Shop(\texttt{http://localhost:3000})에 접속
+    \item F12로 DevTools를 엽니다
+    \item \textbf{Sources} 탭 (또는 Debugger 탭)을 클릭
+    \item \texttt{main.js} 파일을 찾습니다\\
+          {\footnotesize 이 파일에 Juice Shop의 모든 페이지 경로가 적혀있습니다}
+    \item 파일 안에서 \texttt{score} 또는 \texttt{Score}를 검색합니다 (Ctrl+F)
+    \item 경로(path)를 찾으면 → URL에 직접 입력!
+\end{enumerate}
+\end{block}
+
+\vspace{0.3em}
+\begin{exampleblock}{왜 이게 가능한가}
+웹 앱의 프론트엔드 코드(JavaScript)는 \hlt{브라우저에 다 내려옵니다}.\\
+숨겼다고 해도, 코드를 읽으면 다 보입니다. → 이것이 \textbf{코드 분석(Code Analysis)}
+\end{exampleblock}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=15]{Score Board — 풀이 과정}
+
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{Step 1: DevTools 열기}
+\begin{itemize}
+    \item F12 → Sources (또는 Debugger) 탭
+    \item 왼쪽 파일 트리에서 \texttt{main.js}를 찾음
+    \item 이 파일은 Juice Shop의 \hlt{전체 프론트엔드 코드}
+    \item 크기가 크지만, 검색하면 됨
+\end{itemize}
+\end{block}
+\vspace{0.3em}
+\begin{block}{Step 2: 경로 검색}
+\begin{itemize}
+    \item Ctrl+F → ``score'' 검색
+    \item \texttt{path: "score-board"} 같은 경로를 발견!
+    \item 다른 숨겨진 경로도 보임:\\
+          {\scriptsize administration, accounting, ...}
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{Step 3: 접속}
+\begin{itemize}
+    \item 주소창에 입력:\\
+          \texttt{http://localhost:3000/\red{\#/score-board}}
+    \item → Score Board 페이지 등장!
+    \item 모든 challenge 목록이 보임
+    \item 난이도 $\star$ 부터 $\star\star\star\star\star\star$까지
+\end{itemize}
+\end{block}
+\vspace{0.3em}
+\begin{alertblock}{배운 것}
+\begin{itemize}
+    \item 웹 앱의 코드는 숨길 수 없다
+    \item DevTools로 모든 코드를 볼 수 있다
+    \item \hlt{코드 분석}은 해킹의 기본 스킬
+    \item ``보안은 코드를 숨기는 것이 아니라\\접근을 제어하는 것이다''
+\end{itemize}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{실습 문제 1 — Bender로 로그인하라 (SQLi $\star\star\star$)}
+
+\begin{block}{미션}
+\texttt{bender@juice-sh.op} 계정으로 로그인하세요. 비밀번호는 모릅니다.
+\end{block}
+
+\vspace{0.3em}
+\begin{block}{힌트}
+\begin{itemize}
+    \item 아까 배운 \texttt{' OR 1=1--}은 \textit{모든} 사용자를 반환했음
+    \item \textit{Bender만} 반환하려면?
+    \item 이메일 주소를 그대로 쓰되... 뒤에 오는 비밀번호 검사를 없앨 수 있을까?
+    \item \texttt{--}가 뭘 하는지 떠올려보세요
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+{\footnotesize 막히면 Score Board에서 해당 문제의 힌트 버튼을 눌러보세요.}
+\end{frame}
+
+% ============================================================
+\begin{frame}{실습 문제 2 — 관리자 페이지를 찾아라 (Code Analysis $\star\star$)}
+
+\begin{block}{미션}
+Juice Shop에는 일반 사용자가 접근할 수 없는 \textbf{관리자 전용 페이지}가 있습니다.\\
+그 페이지를 찾아서 접속하세요.
+\end{block}
+
+\vspace{0.3em}
+\begin{block}{힌트}
+\begin{itemize}
+    \item Score Board를 찾을 때와 같은 방법을 사용하세요
+    \item \texttt{main.js}에서 ``admin''을 검색하면?
+    \item 경로를 찾았다면 URL에 직접 입력
+    \item \texttt{administration}이라는 단어가 보이지 않나요?
+\end{itemize}
+\end{block}
+
+\vspace{0.3em}
+{\footnotesize 풀면 Score Board에 초록색 체크가 뜹니다!}
+\end{frame}
+
+% ============================================================
+\begin{frame}[fragile,shrink=3]{Gemini로 XSS 우회 PoC 만들기}
+
+Gemini에게 XSS 탐지 규칙과 PoC를 보여주고 우회를 요청하면:
+
+\vspace{0.2em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{Gemini에게 보여준 것}
+{\scriptsize
+규칙: \texttt{content:"<script"; nocase; sid:100003;}\\
++ PoC 코드를 함께 보여주고\\
+``이 룰을 우회하도록 수정해줘'' 요청
+}
+\end{block}
+\vspace{0.2em}
+\begin{block}{\red{기존 코드} (탐지됨)}
+{\scriptsize
+페이로드: \texttt{<script>alert("xss")</script>}\\
+헤더에도: \texttt{User-Agent: ... <script>...}
+}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{Gemini의 우회 코드}
+\begin{lstlisting}[language=Python]
+# <script> 대신 다른 태그 사용
+bypass = '<img src=x onerror='
+         '"alert(`xss`)">'
+
+# 헤더도 변경
+headers = {
+  "User-Agent":
+    "Mozilla/5.0 "
+    "<svg/onload=alert(1)>"
+}
+\end{lstlisting}
+\end{block}
+\vspace{0.2em}
+\begin{alertblock}{Gemini의 설명}
+{\scriptsize ``규칙이 \texttt{<script}만 찾으므로,\\\texttt{<img>}나 \texttt{<svg>}를 쓰면 통과합니다.\\브라우저에서는 똑같이 실행됩니다.''}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=3]{Gemini로 방어 규칙도 만들기}
+
+우회가 성공했으니, 이번엔 \blue{방어자 입장}에서 Gemini에게 물어봅시다:
+
+\vspace{0.3em}
+\begin{block}{Gemini에게 질문}
+``공격자가 \texttt{<img onerror>}나 \texttt{<svg onload>}로 우회했어.\\
+이것도 잡을 수 있는 Suricata 규칙을 만들어줘''
+\end{block}
+
+\vspace{0.2em}
+\begin{block}{Gemini의 답변}
+{\scriptsize
+``\texttt{onerror=}, \texttt{onload=}, \texttt{eval()} 등 자바스크립트 실행에 필수적인 \textbf{이벤트 핸들러 키워드}를 감시해야 합니다. 정규표현식(pcre)을 사용하면 다양한 태그를 한 번에 잡을 수 있습니다.''}
+\end{block}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{Gemini가 만든 개선 규칙}
+{\scriptsize
+\texttt{pcre:"/(onerror|onload|ontoggle)/i";}\\
+\texttt{sid:200002;}
+}
+\vspace{0.2em}
+\begin{itemize}
+    \item 태그가 아닌 \hlt{이벤트 핸들러}를 감시
+    \item \texttt{onerror=}, \texttt{onload=} 등
+    \item 정규식(pcre)으로 패턴 매칭
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{대시보드에서 적용}
+\begin{enumerate}
+    \item Defense Panel → \texttt{[+ New Rule]}
+    \item Gemini가 만든 규칙 붙여넣기
+    \item \texttt{[Save \& Apply]}
+    \item 우회 PoC 다시 실행
+    \item → 이번엔 \hlt{탐지됨}!
+\end{enumerate}
+\end{block}
+\vspace{0.2em}
+\begin{alertblock}{끝없는 창과 방패}
+공격자: 태그를 바꿈 → 통과\\
+방어자: 이벤트 핸들러도 감시\\
+공격자: 인코딩으로 우회?\\
+방어자: 디코딩 후 검사?\\
+→ \hlt{이래서 AI가 필요합니다}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}[shrink=5]{전체 사이클 정리 — Gemini를 활용한 공격-방어}
+
+\begin{center}
+\begin{tikzpicture}[
+    flowbox/.style={draw, rounded corners=3pt, minimum width=2.5cm, minimum height=0.7cm, font=\scriptsize\bfseries, align=center},
+    arr/.style={-{Stealth[length=5pt]}, thick},
+]
+\node[flowbox, fill=redTeam!15] (a1) {1. 공격 PoC\\실행};
+\node[flowbox, fill=blueTeam!15, right=1cm of a1] (a2) {2. IDS가\\탐지!};
+\node[flowbox, fill=opsOrange!15, right=1cm of a2] (a3) {3. Gemini에게\\우회 요청};
+\node[flowbox, fill=redTeam!15, below=0.8cm of a3] (a4) {4. 우회 PoC\\실행};
+\node[flowbox, fill=intGreen!15, left=1cm of a4] (a5) {5. 탐지\\안 됨!};
+\node[flowbox, fill=opsOrange!15, left=1cm of a5] (a6) {6. Gemini에게\\방어 규칙 요청};
+\node[flowbox, fill=blueTeam!15, below=0.8cm of a6] (a7) {7. 새 규칙\\적용};
+\node[flowbox, fill=blueTeam!15, right=1cm of a7] (a8) {8. 다시\\탐지됨!};
+
+\draw[arr] (a1) -- (a2);
+\draw[arr] (a2) -- (a3);
+\draw[arr] (a3) -- (a4);
+\draw[arr] (a4) -- (a5);
+\draw[arr] (a5) -- (a6);
+\draw[arr] (a6) -- (a7);
+\draw[arr] (a7) -- (a8);
+\end{tikzpicture}
+\end{center}
+
+\vspace{0.3em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{AI가 공격에 쓰이면}
+\begin{itemize}
+    \item Gemini가 우회 코드를 만들어줌
+    \item 보안 지식 없이도 공격 가능
+    \item 규칙 기반 방어는 한계
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{AI가 방어에도 쓰이면}
+\begin{itemize}
+    \item Gemini가 방어 규칙도 만들어줌
+    \item 하지만 결국 \hlt{패턴 매칭의 한계}
+    \item → AI IDS: 행동 자체를 학습해서 판단
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\section{정리}
+% ============================================================
+
+\begin{frame}{오늘 배운 것}
+
+\begin{columns}[T]
+\begin{column}{0.55\textwidth}
+\begin{adjustbox}{max width=\textwidth}
+\footnotesize
+\begin{tabular}{lll}
+\toprule
+\textbf{공격} & \textbf{한 줄 요약} & \textbf{비유} \\
+\midrule
+\rowcolor{layer3} SQLi & 입력이 DB 질문에 삽입됨 & 주문서 조작 \\
+\rowcolor{layer3} XSS & 입력이 HTML에 삽입됨 & 게시판에 함정 \\
+\rowcolor{layer1} Brute Force & 비밀번호 전부 시도 & 자물쇠 전수조사 \\
+\rowcolor{layer2} Bot & 자동화 대량 요청 & 로봇 손님 \\
+\rowcolor{layer2} DoS & 서버에 과부하 & 폭탄 전화 \\
+\rowcolor{layer2} Port Scan & 열린 문 찾기 & 창문 흔들기 \\
+\rowcolor{layer3} Infiltration & 공격의 연쇄 & 한 곳 뚫고 진입 \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{column}
+\begin{column}{0.42\textwidth}
+\begin{alertblock}{모든 공격의 공통점}
+\hlt{사용자 입력을 신뢰하면 안 된다}
+\begin{itemize}
+    \item 입력값을 SQL에 넣지 마라
+    \item 입력값을 HTML에 넣지 마라
+    \item 입력 횟수를 제한하라
+    \item 입력값을 항상 검증하라
+\end{itemize}
+\end{alertblock}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ============================================================
+\begin{frame}{핵심 교훈 3가지}
+
+\begin{center}
+\Large
+\begin{enumerate}
+    \item \hlt{사용자 입력을 절대 신뢰하지 마라}\\[0.3em]
+          {\normalsize SQLi도, XSS도, 모두 ``입력값 검증 실패''에서 시작}
+
+    \vspace{0.5em}
+    \item \hlt{보안 장비(IDS)도 완벽하지 않다}\\[0.3em]
+          {\normalsize 규칙을 조금만 바꿔도 우회 가능 — Gemini로 직접 확인했음}
+
+    \vspace{0.5em}
+    \item \hlt{AI는 양날의 검이다}\\[0.3em]
+          {\normalsize 공격자도 AI를 쓰고, 방어자도 AI를 써야 하는 시대}
+\end{enumerate}
+\end{center}
+\end{frame}
+
+% ============================================================
+\begin{frame}{다음 시간 예고}
+\begin{center}
+\Large
+오늘은 \red{공격}을 배웠습니다.\\[0.5em]
+다음 시간에는 이 공격을 \blue{탐지하고 막는 방법}을 배웁니다.
+\end{center}
+
+\vspace{1em}
+\begin{columns}[T]
+\begin{column}{0.48\textwidth}
+\begin{block}{다음: IDS (침입 탐지 시스템)}
+\begin{itemize}
+    \item 공격 트래픽을 자동으로 감지
+    \item 탐지 규칙을 직접 작성
+    \item ``이런 패턴이 보이면 공격이다''
+\end{itemize}
+\end{block}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{block}{그 다음: AI IDS}
+\begin{itemize}
+    \item 규칙으로 못 잡는 공격이 있다
+    \item AI가 공격 패턴을 학습
+    \item 머신러닝 모델 직접 만들기
+\end{itemize}
+\end{block}
+\end{column}
+\end{columns}
+\end{frame}
+
+\end{document}

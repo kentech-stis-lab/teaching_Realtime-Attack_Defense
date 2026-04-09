@@ -1,0 +1,9 @@
+{
+  "id": "brute_ftp",
+  "name": "Brute Force - FTP",
+  "category": "Brute Force",
+  "cic_ids_label": "Brute Force - FTP",
+  "description": "Brute forces FTP login on ftp-server:21 using ftplib with a common password wordlist. Downloads secret.txt on success.",
+  "language": "bash",
+  "is_preset": true
+}

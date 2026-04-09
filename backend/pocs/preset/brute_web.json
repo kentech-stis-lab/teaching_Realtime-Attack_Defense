@@ -1,0 +1,9 @@
+{
+  "id": "brute_web",
+  "name": "Brute Force - Web Login",
+  "category": "Brute Force",
+  "cic_ids_label": "Brute Force - Web",
+  "description": "Brute forces the Juice Shop login endpoint with a wordlist of common passwords targeting the admin account.",
+  "language": "python",
+  "is_preset": true
+}

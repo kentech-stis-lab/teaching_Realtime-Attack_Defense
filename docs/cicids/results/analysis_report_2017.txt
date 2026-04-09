@@ -1,0 +1,94 @@
+
+============================================================
+  CIC-IDS 2017 데이터 로드
+============================================================
+  Loading Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv ... (225,745 rows)
+  Loading Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv ... (286,467 rows)
+  Loading Friday-WorkingHours-Morning.pcap_ISCX.csv ... (191,033 rows)
+  Loading Monday-WorkingHours.pcap_ISCX.csv ... (529,918 rows)
+  Loading Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv ... (288,602 rows)
+  Loading Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv ... (170,366 rows)
+  Loading Tuesday-WorkingHours.pcap_ISCX.csv ... (445,909 rows)
+  Loading Wednesday-workingHours.pcap_ISCX.csv ... (692,703 rows)
+
+  전체 레코드 수: 2,830,743
+
+============================================================
+  전체 공격 유형 분포
+============================================================
+                     Label   Count  Ratio(%)     Category  Lab_Target
+                    BENIGN 2273097    80.300       Benign       False
+                  DoS Hulk  231073     8.163          DoS       False
+                  PortScan  158930     5.614     PortScan       False
+                      DDoS  128027     4.523         DDoS       False
+             DoS GoldenEye   10293     0.364          DoS       False
+               FTP-Patator    7938     0.280  Brute Force       False
+               SSH-Patator    5897     0.208  Brute Force       False
+             DoS slowloris    5796     0.205          DoS       False
+          DoS Slowhttptest    5499     0.194          DoS       False
+                       Bot    1966     0.069          Bot       False
+  Web Attack - Brute Force    1507     0.053   Web Attack        True
+          Web Attack - XSS     652     0.023   Web Attack        True
+              Infiltration      36     0.001 Infiltration       False
+Web Attack - SQL Injection      21     0.001   Web Attack        True
+                Heartbleed      11     0.000          DoS       False
+
+============================================================
+  카테고리별 요약
+============================================================
+                Count  Ratio(%)
+Category                       
+Benign        2273097     80.30
+DoS            252672      8.93
+PortScan       158930      5.61
+DDoS           128027      4.52
+Brute Force     13835      0.49
+Web Attack       2180      0.08
+Bot              1966      0.07
+Infiltration       36      0.00
+
+============================================================
+  수업 실습 대상: Web Attack 상세
+============================================================
+  Web Attack 레코드 수: 2,180
+
+  유형별 분포:
+Label
+Web Attack - Brute Force      1507
+Web Attack - XSS               652
+Web Attack - SQL Injection      21
+
+============================================================
+  Web Attack 주요 Feature 통계
+============================================================
+
+  [Web Attack - Brute Force]
+    Destination Port: mean=80.00, std=0.00, min=80.00, max=80.00
+    Flow Duration: mean=6506181.63, std=6415511.12, min=20.00, max=35451960.00
+    Total Fwd Packets: mean=12.37, std=42.41, min=1.00, max=204.00
+    Total Backward Packets: mean=6.06, std=21.80, min=1.00, max=106.00
+    Flow Bytes/s: mean=179.28, std=764.96, min=0.00, max=7589.09
+    Flow Packets/s: mean=3684.90, std=12886.33, min=0.67, max=100000.00
+
+  [Web Attack - XSS]
+    Destination Port: mean=80.00, std=0.00, min=80.00, max=80.00
+    Flow Duration: mean=6715357.09, std=9592863.04, min=4.00, max=70203058.00
+    Total Fwd Packets: mean=7.90, std=30.78, min=1.00, max=212.00
+    Total Backward Packets: mean=3.57, std=15.99, min=0.00, max=114.00
+    Flow Bytes/s: mean=103.35, std=571.77, min=0.00, max=4134.87
+    Flow Packets/s: mean=1565.96, std=21189.49, min=0.67, max=500000.00
+
+  [Web Attack - SQL Injection]
+    Destination Port: mean=80.00, std=0.00, min=80.00, max=80.00
+    Flow Duration: mean=2870398.29, std=2547204.35, min=42.00, max=5086516.00
+    Total Fwd Packets: mean=3.05, std=1.80, min=1.00, max=6.00
+    Total Backward Packets: mean=2.67, std=1.53, min=1.00, max=5.00
+    Flow Bytes/s: mean=318.73, std=341.29, min=0.00, max=947.44
+    Flow Packets/s: mean=12794.10, std=17397.22, min=1.58, max=47619.05
+
+  [+] Web Attack 레코드 저장: results/web_attacks_2017.csv
+
+============================================================
+  완료!
+============================================================
+

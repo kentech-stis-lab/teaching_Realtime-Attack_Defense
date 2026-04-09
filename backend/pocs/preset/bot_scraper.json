@@ -1,0 +1,9 @@
+{
+  "id": "bot_scraper",
+  "name": "Bot - Rapid Scraper",
+  "category": "Bot",
+  "cic_ids_label": "Bot",
+  "description": "Rapidly scrapes all products, details, and reviews from Juice Shop to trigger bot detection rules.",
+  "language": "python",
+  "is_preset": true
+}

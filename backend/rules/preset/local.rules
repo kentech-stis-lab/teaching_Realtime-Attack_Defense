@@ -1,0 +1,34 @@
+# =============================================================================
+# Red/Blue Team Lab - Suricata Custom Rules
+# =============================================================================
+
+# --- SQL Injection ---
+alert http any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] SQL Injection Attempt Detected"; flow:to_server,established; content:"SELECT"; nocase; http_uri; pcre:"/(\%27)|(\')|(\-\-)|(\%23)|(#)/i"; classtype:web-application-attack; sid:100001; rev:1;)
+
+alert http any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] SQL Injection - UNION SELECT"; flow:to_server,established; content:"UNION"; nocase; content:"SELECT"; nocase; distance:0; http_uri; classtype:web-application-attack; sid:100002; rev:1;)
+
+# --- XSS ---
+alert http any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] XSS Attack Detected - Script Tag"; flow:to_server,established; content:"<script"; nocase; classtype:web-application-attack; sid:100003; rev:1;)
+
+alert http any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] XSS Attack Detected - Event Handler"; flow:to_server,established; pcre:"/(onload|onerror|onmouseover|onfocus)\s*=/i"; classtype:web-application-attack; sid:100004; rev:1;)
+
+# --- Brute Force (Web Login) ---
+alert http any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] Web Login Brute Force Attempt"; flow:to_server,established; content:"POST"; http_method; content:"/rest/user/login"; http_uri; threshold:type both, track by_src, count 5, seconds 30; classtype:attempted-admin; sid:100005; rev:1;)
+
+# --- SSH Brute Force ---
+alert tcp any any -> $HOME_NET $SSH_PORTS (msg:"[LAB] SSH Brute Force Attempt"; flow:to_server; flags:S; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:100006; rev:1;)
+
+# --- FTP Brute Force ---
+alert tcp any any -> $HOME_NET $FTP_PORTS (msg:"[LAB] FTP Brute Force Attempt"; flow:to_server,established; content:"USER"; threshold:type both, track by_src, count 5, seconds 60; classtype:attempted-admin; sid:100007; rev:1;)
+
+# --- Bot / Scraping ---
+alert http any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] Rapid Bot Scraping Detected"; flow:to_server,established; content:"GET"; http_method; threshold:type both, track by_src, count 30, seconds 10; classtype:misc-activity; sid:100008; rev:1;)
+
+# --- DoS / Slowloris ---
+alert tcp any any -> $HOME_NET $HTTP_PORTS (msg:"[LAB] Potential Slowloris DoS Attack"; flow:to_server; flags:S; threshold:type both, track by_src, count 20, seconds 10; classtype:attempted-dos; sid:100009; rev:1;)
+
+# --- Port Scan ---
+alert tcp any any -> $HOME_NET any (msg:"[LAB] Port Scan Detected"; flags:S; threshold:type both, track by_src, count 20, seconds 5; classtype:attempted-recon; sid:100010; rev:1;)
+
+# --- Infiltration / Lateral Movement ---
+alert tcp $HOME_NET any -> $HOME_NET 3306 (msg:"[LAB] Internal DB Access - Possible Infiltration"; flow:to_server,established; classtype:trojan-activity; sid:100011; rev:1;)

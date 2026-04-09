@@ -1,0 +1,9 @@
+{
+  "id": "infiltration",
+  "name": "Infiltration - Multi-Stage Attack",
+  "category": "Infiltration",
+  "cic_ids_label": "Infiltration",
+  "description": "Chains SQLi login bypass, internal API credential theft, and MySQL database access to capture the flag.",
+  "language": "python",
+  "is_preset": true
+}

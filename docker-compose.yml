@@ -1,0 +1,146 @@
+services:
+  juice-shop:
+    image: bkimminich/juice-shop
+    container_name: juice-shop
+    ports:
+      - "3000:3000"
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.10
+      backend-net:
+        ipv4_address: 172.20.1.10
+    restart: unless-stopped
+
+  ssh-server:
+    image: linuxserver/openssh-server
+    container_name: ssh-server
+    ports:
+      - "2222:2222"
+    environment:
+      - PASSWORD_ACCESS=true
+      - USER_PASSWORD=admin123
+      - USER_NAME=admin
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.11
+    restart: unless-stopped
+
+  ftp-server:
+    image: fauria/vsftpd
+    container_name: ftp-server
+    ports:
+      - "2121:21"
+      - "21100-21110:21100-21110"
+    environment:
+      - FTP_USER=admin
+      - FTP_PASS=admin123
+      - PASV_ADDRESS=127.0.0.1
+      - PASV_MIN_PORT=21100
+      - PASV_MAX_PORT=21110
+    volumes:
+      - ftp-data:/home/vsftpd/admin
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.12
+    restart: unless-stopped
+    entrypoint: /bin/bash
+    command: >
+      -c "
+      /usr/sbin/run-vsftpd.sh &
+      sleep 3;
+      mkdir -p /home/vsftpd/admin;
+      echo 'FLAG{ftp_secret_found}' > /home/vsftpd/admin/secret.txt;
+      chown -R ftp:ftp /home/vsftpd/admin;
+      wait
+      "
+
+  suricata:
+    image: jasonish/suricata:latest
+    container_name: suricata
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_NICE
+    volumes:
+      - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml
+      - ./suricata/rules/:/etc/suricata/rules/
+      - suricata-logs:/var/log/suricata
+    command: -i eth0
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.13
+    restart: unless-stopped
+
+  internal-db:
+    image: mysql:8
+    container_name: internal-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+    volumes:
+      - ./services/internal-db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      backend-net:
+        ipv4_address: 172.20.1.20
+    restart: unless-stopped
+
+  internal-api:
+    build: ./services/internal-api
+    container_name: internal-api
+    expose:
+      - "5000"
+    networks:
+      backend-net:
+        ipv4_address: 172.20.1.30
+    depends_on:
+      - internal-db
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - suricata-logs:/var/log/suricata
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./wordlists:/app/wordlists:ro
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.100
+      backend-net:
+        ipv4_address: 172.20.1.100
+    depends_on:
+      - juice-shop
+      - ssh-server
+      - ftp-server
+      - suricata
+      - internal-db
+      - internal-api
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    container_name: dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      frontend-net:
+    restart: unless-stopped
+
+networks:
+  frontend-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  backend-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.1.0/24
+
+volumes:
+  suricata-logs:
+  ftp-data:

@@ -1,0 +1,9 @@
+{
+  "id": "sqli_login_bypass",
+  "name": "SQL Injection - Login Bypass",
+  "category": "SQLi",
+  "cic_ids_label": "Web Attack - Sql Injection",
+  "description": "Attempts to bypass Juice Shop login using classic ' OR 1=1-- SQL injection in the email field.",
+  "language": "python",
+  "is_preset": true
+}

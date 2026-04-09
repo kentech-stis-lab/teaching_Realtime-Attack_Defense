@@ -1,0 +1,9 @@
+{
+  "id": "xss_stored",
+  "name": "XSS - Stored (Product Review)",
+  "category": "XSS",
+  "cic_ids_label": "Web Attack - XSS",
+  "description": "Injects a stored XSS payload via a Juice Shop product review. First authenticates via SQLi, then posts a malicious review.",
+  "language": "python",
+  "is_preset": true
+}

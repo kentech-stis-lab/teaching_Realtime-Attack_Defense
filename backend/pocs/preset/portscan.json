@@ -1,0 +1,9 @@
+{
+  "id": "portscan",
+  "name": "Port Scan - Network Recon",
+  "category": "PortScan",
+  "cic_ids_label": "PortScan",
+  "description": "Scans the 172.20.0.0/24 lab network for open ports using nmap or a Python socket scanner fallback.",
+  "language": "bash",
+  "is_preset": true
+}

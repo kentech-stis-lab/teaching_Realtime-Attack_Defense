@@ -1,0 +1,9 @@
+{
+  "id": "xss_reflected",
+  "name": "XSS - Reflected (Order Tracking)",
+  "category": "XSS",
+  "cic_ids_label": "Web Attack - XSS",
+  "description": "Sends reflected XSS payloads via the Juice Shop order tracking endpoint, testing multiple vectors.",
+  "language": "python",
+  "is_preset": true
+}

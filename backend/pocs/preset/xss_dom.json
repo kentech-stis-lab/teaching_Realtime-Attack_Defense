@@ -1,0 +1,9 @@
+{
+  "id": "xss_dom",
+  "name": "XSS - DOM-based (Search)",
+  "category": "XSS",
+  "cic_ids_label": "Web Attack - XSS",
+  "description": "Triggers DOM-based XSS via the Juice Shop search parameter using an iframe/script injection payload.",
+  "language": "python",
+  "is_preset": true
+}

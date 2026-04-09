@@ -1,0 +1,9 @@
+{
+  "id": "dos_slowloris",
+  "name": "DoS - Slowloris",
+  "category": "DoS",
+  "cic_ids_label": "DoS - Slowloris",
+  "description": "Safe Slowloris demonstration: opens 50 connections with partial HTTP headers for 10 seconds to simulate a slow-rate DoS.",
+  "language": "python",
+  "is_preset": true
+}

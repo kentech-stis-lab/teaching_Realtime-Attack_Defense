@@ -1,0 +1,9 @@
+{
+  "id": "sqli_union_select",
+  "name": "SQL Injection - UNION SELECT",
+  "category": "SQLi",
+  "cic_ids_label": "Web Attack - Sql Injection",
+  "description": "Uses UNION SELECT injection on Juice Shop product search to attempt to dump the Users table.",
+  "language": "python",
+  "is_preset": true
+}

@@ -1,0 +1,9 @@
+{
+  "id": "brute_ssh",
+  "name": "Brute Force - SSH",
+  "category": "Brute Force",
+  "cic_ids_label": "Brute Force - SSH",
+  "description": "Brute forces SSH login on ssh-server:2222 using paramiko with a common password wordlist.",
+  "language": "bash",
+  "is_preset": true
+}
